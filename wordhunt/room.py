@@ -19,6 +19,7 @@ from .solver import Solver
 COUNTDOWN_S = float(os.environ.get("WH_COUNTDOWN_S", 20.0))
 RACE_S = float(os.environ.get("WH_RACE_S", 75.0))
 TICKER_MAX = 60
+MAX_HUMANS = int(os.environ.get("WH_MAX_HUMANS", 24))
 COLORS = ["#ff5d5d", "#4da3ff", "#ffc93c", "#42d392", "#c77dff", "#ff9f43", "#2ec4b6", "#f368e0"]
 
 Send = Callable[[dict], Awaitable[None]]
@@ -85,6 +86,7 @@ class Room:
         self._lock = asyncio.Lock()
         self.results: list[dict] = []
         self.spectators: set[Any] = set()
+        self.perf = {"broadcast_ms_max": 0.0, "broadcast_ms_last": 0.0, "tick_late_ms_max": 0.0}
         self._boards = load_packed_boards()
         self.rng.shuffle(self._boards)
         for spec in registry.catalog():
@@ -101,7 +103,7 @@ class Room:
 
     def add_ai(self, seat_id: str, name: str, policy: Policy, profile: HandProfile, label: str = "", spec_id: str = "") -> Seat:
         seat = Seat(seat_id, name, "ai", self._color(), hand=Hand(policy, profile, random.Random(self.rng.random())), label=label, spec_id=spec_id)
-        seat.queued = self.state in ("countdown", "playing")
+        seat.queued = self.state == "playing"
         self.seats[seat_id] = seat
         return seat
 
@@ -118,11 +120,19 @@ class Room:
             return None
         return self.add_ai(seat_id, name, policy, profile, label=spec.label, spec_id=spec_id)
 
-    def add_human(self, player_id: str, name: str, ws: Any) -> Seat:
+    @property
+    def n_humans(self) -> int:
+        return sum(1 for s in self.seats.values() if s.kind == "human")
+
+    def add_human(self, player_id: str, name: str, ws: Any) -> Seat | None:
+        """Seat a human. Joining in lobby/countdown/results plays now; joining mid-race is queued
+        for the next round (the client shows a banner). Returns None when the room is full."""
         seat = self.seats.get(player_id)
         if seat is None:
+            if self.n_humans >= MAX_HUMANS:
+                return None
             seat = Seat(player_id, name, "human", self._color())
-            seat.queued = self.state in ("countdown", "playing")
+            seat.queued = self.state == "playing"
             self.seats[player_id] = seat
         if name:
             seat.name = name
@@ -151,6 +161,18 @@ class Room:
     def now(self) -> float:
         return time.time()
 
+    @staticmethod
+    def mask_entry(entry: dict) -> dict:
+        w = entry["word"]
+        return {**entry, "word": w[:2] + "_" * max(0, len(w) - 2), "masked": True}
+
+    def ticker_for(self, seat_id: str | None) -> list[dict]:
+        """Ticker as seen by one seat: others' words masked until results; own words in clear."""
+        entries = self.ticker[-TICKER_MAX:]
+        if self.state == "results":
+            return entries
+        return [e if e["seat_id"] == seat_id else self.mask_entry(e) for e in entries]
+
     def snapshot(self) -> dict:
         reveal = self.state == "results"
         return {
@@ -161,7 +183,9 @@ class Room:
             "host_id": self.host_id,
             "board": self.board if self.state in ("playing", "results") else "",
             "seats": [s.public(reveal) for s in self.seats.values()],
-            "ticker": self.ticker[-TICKER_MAX:],
+            "ticker": self.ticker_for(None),
+            "max_humans": MAX_HUMANS,
+            "perf": dict(self.perf),
             "phase_ends_at": self.phase_ends_at,
             "now": self.now(),
             "countdown_s": COUNTDOWN_S,
@@ -188,7 +212,44 @@ class Room:
             self.drop_socket(ws)
 
     async def send_state(self) -> None:
-        await self.broadcast(self.snapshot())
+        snap = self.snapshot()
+        if self.state == "results":
+            await self.broadcast(snap)
+            return
+        t0 = time.perf_counter()
+        for ws in list(self.spectators):
+            await self._send(ws, snap)
+        for s in self.seats.values():
+            if not s.sockets:
+                continue
+            mine = {**snap, "ticker": self.ticker_for(s.seat_id)}
+            for ws in list(s.sockets):
+                await self._send(ws, mine)
+        self._note_broadcast(t0)
+
+    async def _send(self, ws: Any, msg: dict) -> None:
+        try:
+            await ws.send_json(msg)
+        except Exception:
+            self.drop_socket(ws)
+
+    def _note_broadcast(self, t0: float) -> None:
+        ms = (time.perf_counter() - t0) * 1000
+        self.perf["broadcast_ms_last"] = round(ms, 2)
+        self.perf["broadcast_ms_max"] = max(self.perf["broadcast_ms_max"], round(ms, 2))
+
+    async def broadcast_tick(self, entry: dict, owner: "Seat | None") -> None:
+        """Owner sees the full word; everyone else sees it masked until results."""
+        t0 = time.perf_counter()
+        masked = {"type": "tick", "entry": self.mask_entry(entry)}
+        full = {"type": "tick", "entry": entry}
+        for ws in list(self.spectators):
+            await self._send(ws, masked)
+        for s in self.seats.values():
+            msg = full if s is owner else masked
+            for ws in list(s.sockets):
+                await self._send(ws, msg)
+        self._note_broadcast(t0)
 
     # ---- flow --------------------------------------------------------------------------------
     def can_control(self, player_id: str) -> bool:
@@ -228,8 +289,12 @@ class Room:
 
         period = 0.05
         while self.now() < self.phase_ends_at:
+            t0 = time.perf_counter()
             await self._tick_ais()
             await asyncio.sleep(period)
+            late = (time.perf_counter() - t0 - period) * 1000
+            if late > self.perf["tick_late_ms_max"]:
+                self.perf["tick_late_ms_max"] = round(late, 2)
 
         self.state = "results"
         for s in self.seats.values():
@@ -275,9 +340,11 @@ class Room:
                     s.cursor_path = []
                     cursors[s.seat_id] = {"path": [], "tile": None}
         if cursors:
+            t0 = time.perf_counter()
             await self.broadcast({"type": "cursors", "cursors": cursors})
+            self._note_broadcast(t0)
         for t in ticks:
-            await self.broadcast({"type": "tick", "entry": t})
+            await self.broadcast_tick(t, None)
 
     def judge(self, seat: Seat, path: list[int]) -> dict:
         """Validate a path; update the seat's private list; return a ticker entry."""
@@ -303,9 +370,8 @@ class Room:
 
     async def human_submit(self, seat: Seat, path: list[int]) -> dict:
         res = self.judge(seat, path)
-        res["total"] = seat.score
-        await self.broadcast({"type": "tick", "entry": res})
-        return res
+        await self.broadcast_tick(res, seat)
+        return {**res, "total": seat.score}
 
     async def human_path(self, seat: Seat, path: list[int]) -> None:
         seat.cursor_path = path

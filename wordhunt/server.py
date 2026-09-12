@@ -112,6 +112,10 @@ async def ws_room(ws: WebSocket, code: str):
                 name = clean_name(msg.get("name", ""), pid)
                 players[pid] = name
                 seat = room.add_human(pid, name, ws)
+                if seat is None:
+                    await ws.send_json({"type": "error", "error": f"Room is full ({room.n_humans} players)", "fatal": True})
+                    await ws.close()
+                    return
                 await ws.send_json({"type": "welcome", "player_id": pid, "seat_id": seat.seat_id, "name": seat.name})
                 await room.send_state()
             elif spectator:
