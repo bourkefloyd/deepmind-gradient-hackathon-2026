@@ -6,6 +6,7 @@ room.py is `emit(event, from_room(self))`. Formatters and transport stay game-ag
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from . import config, discord, events, formatters
@@ -42,6 +43,7 @@ def from_room(room: Any) -> dict[str, Any]:
         "countdown_s": getattr(room, "countdown_s", None) or _module_const(room, "COUNTDOWN_S", 20),
         "race_s": getattr(room, "race_s", None) or _module_const(room, "RACE_S", 75),
         "quiet": bool(getattr(room, "quiet", False)),     # POST /api/rooms {quiet: true}: no Discord posts
+        "_notify": getattr(room, "broadcast", None),      # async (dict) -> None; toasts the room when a post lands
     }
     level = getattr(room, "level", None)
     if level is not None:
@@ -104,11 +106,58 @@ async def discord_recap(event_type: str, payload: dict[str, Any]) -> None:
         log.info("%s: room %s is quiet, not posting", event_type, payload.get("code"))
         return
     text = fmt(payload)
-    res = await discord.send_recap(text)
+    t0 = time.perf_counter()
+    try:
+        res = await discord.send_recap(text)
+    except Exception as e:  # noqa: BLE001
+        await notify(payload, event_type, ok=False, ms=_ms(t0), error=f"{type(e).__name__}: {e}")
+        raise
+    await notify(payload, event_type, ok=True, ms=_ms(t0), result=res)
     if settings().dry_run:
         log.info("[dry-run] %s -> would post to Discord via %s:\n%s", event_type, settings().recap_action, text)
     else:
         log.info("%s -> posted via %s (%s)", event_type, settings().recap_action, _short(res))
+
+
+def _ms(t0: float) -> int:
+    return int((time.perf_counter() - t0) * 1000)
+
+
+def discord_link(res: Any) -> str:
+    """Best-effort message URL from an action result (custom action may return url/id/channel/guild)."""
+    if not isinstance(res, dict):
+        return ""
+    for k in ("url", "message_url", "messageUrl", "link"):
+        if isinstance(res.get(k), str) and res[k].startswith("http"):
+            return res[k]
+    mid = res.get("id") or res.get("message_id") or res.get("messageId")
+    ch = res.get("channelId") or res.get("channel_id")
+    guild = res.get("guildId") or res.get("guild_id") or "@me"
+    return f"https://discord.com/channels/{guild}/{ch}/{mid}" if mid and ch else ""
+
+
+async def notify(payload: dict[str, Any], event_type: str, ok: bool, ms: int, result: Any = None,
+                 error: str = "", by: str = "server", label: str = "") -> None:
+    """Broadcast {"type":"integration",...} to the room so the page can toast it. Never raises."""
+    cb = payload.get("_notify")
+    if not callable(cb):
+        return
+    msg = {
+        "type": "integration", "provider": "nango", "action": settings().recap_action, "event": event_type,
+        "ok": bool(ok), "ms": int(ms), "code": payload.get("code"), "round": payload.get("round"), "by": by,
+        "dry_run": settings().dry_run,
+    }
+    if label:
+        msg["label"] = label
+    if error:
+        msg["error"] = error[:200]
+    url = discord_link(result)
+    if url:
+        msg["url"] = url
+    try:
+        await cb(msg)
+    except Exception as e:  # noqa: BLE001
+        log.debug("notify failed: %s", e)
 
 
 def _short(res: Any) -> str:

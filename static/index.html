@@ -251,6 +251,12 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #build{position:fixed;right:8px;bottom:6px;font-size:11px;color:var(--muted);opacity:.8;pointer-events:none;z-index:9;max-width:60vw;text-align:right}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);font-weight:800;padding:10px 16px;border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
+/* ---- integration toasts (Nango -> Discord), bottom-right stack ---- */
+#toasts{position:fixed;right:12px;bottom:28px;display:flex;flex-direction:column-reverse;gap:8px;z-index:21;pointer-events:none;max-width:min(92vw,380px)}
+.itoast{background:var(--panel2);border:1px solid var(--line);border-left:4px solid #5865f2;color:var(--ink);font-size:13px;font-weight:600;padding:10px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s}
+.itoast.on{opacity:1;transform:none}.itoast.bad{border-left-color:var(--bad)}.itoast small{display:block;color:var(--muted);font-weight:500;margin-top:2px}
+.hl .disc.pending .ic{opacity:.45}.hl .disc.pending b::after{content:' · posting…';color:var(--muted);font-weight:500}
+.hl .disc.done .ic{background:var(--accent);color:var(--accent-ink)}.hl .disc.bad .ic{background:var(--bad)}
 /* ---- phones: keep Start / Rematch under the thumb while the list scrolls ---- */
 @media (max-width:899px){
   #lobby .hero-card{padding:10px 14px 12px}
@@ -469,7 +475,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
       <div class="hl">
         <div class="box"><h4>Longest words on the board</h4><div id="resBest"></div></div>
         <div class="box"><h4>Top score</h4><div class="big" id="resTop">–</div><div class="small" style="text-align:left;margin:2px 0 0" id="resTopWho"></div></div>
-        <div class="box"><div class="disc"><div class="ic">💬</div><b>Posted to Discord</b><span>Round recap is in the channel</span></div></div>
+        <div class="box"><div class="disc pending" id="discBadge"><div class="ic" id="discIc">💬</div><b>Posted to Discord</b><span id="discSub">via Nango · waiting for the action…</span></div></div>
       </div>
     </div>
   </div>
@@ -500,6 +506,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 
 <div id="build"></div>
 <div class="toast" id="toast">Link copied</div>
+<div id="toasts"></div>
 <script>
 fetch('/api/build').then(r=>r.json()).then(j=>{document.getElementById('build').textContent=j.build+' · rooms live in memory, reset on deploy'}).catch(()=>{});
 // ---------- identity: anonymous id in localStorage; a passkey can be attached to it later ----------
@@ -553,7 +560,16 @@ function onMsg(m){
   if(m.type==='cursors'){for(const k in m.cursors){cursors[k]=m.cursors[k];noteThinking(k,m.cursors[k])}drawOthers();return}
   if(m.type==='tick'){if(!SPECT&&m.entry.seat_id===ME)return;addTick(m.entry,true);const s=S&&S.seats.find(x=>x.seat_id===m.entry.seat_id);if(s&&m.entry.ok){s.score+=m.entry.delta;s.n_words=(s.n_words||0)+1}if(SPECT)renderSpSeats();else renderScores();return}
   if(m.type==='mine'){onMine(m);return}
+  if(m.type==='integration'){onIntegration(m);return}
 }
+// ---------- integrations: Nango -> Discord posts, toasted so the tool call is visible without a terminal ----------
+let DISC={round:null,ok:null};
+function iToast(text,sub,bad){const el=document.createElement('div');el.className='itoast'+(bad?' bad':'');el.textContent=text;if(sub){const s=document.createElement('small');s.textContent=sub;el.appendChild(s)}$('toasts').appendChild(el);requestAnimationFrame(()=>el.classList.add('on'));setTimeout(()=>{el.classList.remove('on');setTimeout(()=>el.remove(),300)},5000)}
+function onIntegration(m){const secs=(m.ms/1000).toFixed(1)+' s';const via=m.dry_run?'Nango (dry-run)':'Nango';
+  if(m.by==='gemma')iToast(m.ok?(m.label||'🤖 Gemma posted a recap via Nango'):'🤖 Gemma recap failed (Nango)',(m.ok?'tool call → Discord · ':'')+secs,!m.ok);
+  else iToast(m.ok?`📡 Posted to Discord via ${via}`:'Discord post failed (Nango)',(m.ok?`${m.event} · ${secs}`:(m.error||m.event)),!m.ok);
+  if(m.event==='round_ended'){DISC={round:m.round,ok:m.ok,url:m.url};renderDisc()}}
+function renderDisc(){const b=$('discBadge');if(!b||!S)return;const live=DISC.round===S.round&&DISC.ok!==null;b.classList.toggle('pending',!live);b.classList.toggle('done',live&&DISC.ok===true);b.classList.toggle('bad',live&&DISC.ok===false);$('discIc').textContent=live?(DISC.ok?'✅':'⚠️'):'💬';$('discSub').textContent=live?(DISC.ok?'Round recap is in the channel · via Nango':'Discord post failed (Nango)'):'via Nango · waiting for the action…'}
 
 // ---------- render ----------
 function seatRow(s,withScore,removable){const me=s.seat_id===ME;return `<div class="seat">${avatar(s)}<span class="nm">${esc(s.name)}${badge(s)}${s.kind==='ai'&&s.label?` <span class="kind">· ${esc(s.label)}</span>`:''}</span>${withScore?`<span class="score">${fmtN(s.score)}</span>`:`<span class="tag">${s.seat_id===S.host_id?'host':(s.queued?'next round':(s.connected?'':'offline'))}</span>`}${removable&&s.kind==='ai'?`<button class="x" data-rm="${s.seat_id}">remove</button>`:''}</div>`}
@@ -584,7 +600,7 @@ function render(prev){
     const podium=many?seats.slice(0,3):seats;$('resSeats').classList.toggle('few',podium.length<=3);$('resSeats').innerHTML=podium.map(rcard).join('');
     const tbl=$('resTable');tbl.classList.toggle('hidden',!many);if(many)tbl.innerHTML=seats.slice(3).map((s,i)=>{const w=s.words||[];return `<div class="rt${s.seat_id===ME?' me':''}"><span class="rk">${i+4}</span>${avatar(s)}<span class="nm">${esc(s.name)}${badge(s)}</span><span class="bw">${w[0]?esc(w[0][0]):'—'}</span><span class="nw">${w.length}w</span><span class="sc">${fmtN(s.score)}</span></div>`}).join('');
     const r=S.results&&S.results[0];if(r){$('resN').textContent=fmtN(r.n_board_words);$('resMax').textContent=fmtN(r.max_score);$('resBest').innerHTML=r.best_words.slice(0,6).map(w=>`<div class="lw">${esc(w.toUpperCase())}<span>${w.length}</span></div>`).join('')}
-    const top=seats[0];$('resTop').textContent=top?fmtN(top.score):'–';$('resTopWho').textContent=top?top.name+(top.kind==='ai'?' · AI':' · human'):'';const h=isHost();$('btnRematch').classList.toggle('hidden',!h);$('resWait').classList.toggle('hidden',h)}
+    const top=seats[0];$('resTop').textContent=top?fmtN(top.score):'–';$('resTopWho').textContent=top?top.name+(top.kind==='ai'?' · AI':' · human'):'';const h=isHost();$('btnRematch').classList.toggle('hidden',!h);$('resWait').classList.toggle('hidden',h);renderDisc()}
 }
 function ringSet(fgId,ringId,left){const total=S.race_s||75;const fg=$(fgId);if(fg)fg.style.strokeDashoffset=(RING*(1-Math.min(1,left/total))).toFixed(1);const r=$(ringId);if(r)r.classList.toggle('low',left<10)}
 setInterval(()=>{if(!S)return;const left=Math.max(0,S.phase_ends_at-now());if(S.state==='countdown'){$('cdNum').textContent=Math.ceil(left);if(SPECT)$('spBig').textContent=Math.ceil(left)}else if(S.state==='playing'){$('timer').textContent=fmtT(left);ringSet('ringFg','ring',left);if(SPECT){$('spTimer').textContent=fmtT(left);ringSet('spRingFg','spRing',left)}}},100);

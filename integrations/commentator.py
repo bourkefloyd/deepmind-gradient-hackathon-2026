@@ -188,8 +188,14 @@ async def commentate(payload: dict[str, Any], base_url: str = DEFAULT_BASE_URL, 
         text = decorate_model_text(str(args.get("text", "")), model, latency)
         # Same call the model made, with the attribution header/footer wrapped around its text.
         posted_call = {**tc, "function": {**tc["function"], "arguments": json.dumps({**args, "text": text}, ensure_ascii=False)}}
+        t1 = time.perf_counter()
         results = await tools.dispatch([posted_call])
         r = results[0]
+        # In-process only (payload from handlers.from_room carries the room's broadcast); the
+        # Mac-side spectator path has no way to push a toast into the room.
+        await handlers.notify(payload, "commentator", ok="error" not in r, ms=int((time.perf_counter() - t1) * 1000),
+                              result=r.get("result"), error=r.get("error", ""), by="gemma",
+                              label=f"🤖 {model_label(model)} posted a recap via Nango")
         if "error" in r:
             log.warning("tool dispatch failed: %s", r["error"])
             return Outcome("none", text, tc, latency, r["error"], None, resp)
