@@ -66,7 +66,7 @@ EXISTING_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --for
 SECRET_NAME="${NANGO_SECRET_NAME:-nango-secret-key}"
 SECRET_FLAGS=()
 if [[ "${WH_INTEGRATIONS:-1}" == "1" ]]; then
-  if gcloud secrets describe "$SECRET_NAME" >/dev/null 2>&1; then
+  if gcloud secrets versions access latest --secret "$SECRET_NAME" >/dev/null 2>&1; then
     [[ "$ENV_VARS" == *"|WH_INTEGRATIONS="* ]] || ENV_VARS="$ENV_VARS|WH_INTEGRATIONS=1"
     ENV_VARS="$ENV_VARS|WH_PUBLIC_URL=${WH_PUBLIC_URL:-$EXISTING_URL}"
     SECRET_FLAGS=(--update-secrets "NANGO_SECRET_KEY=$SECRET_NAME:latest")
