@@ -1,0 +1,20 @@
+{
+  "guild_id": "1547705063609470976",
+  "guild_name": "Open Model Hack - Gradient x Google Deepmind",
+  "invite_url": "https://discord.gg/db3aDstTX",
+  "requested_channel_name": "wordhunt",
+  "nango": {
+    "integration_id": "discord-wordhunt",
+    "provider": "unauthenticated",
+    "connection_id": "5ed2de56-09c0-4444-b53b-d4b74174078a",
+    "end_user_id": "wordhunt-buzzer-discord",
+    "action": "send-discord-recap",
+    "action_version": "v1.0.0",
+    "runtime_mcp_url": "https://api.nango.dev/mcp",
+    "test": {
+      "ok": true,
+      "status": 200
+    }
+  },
+  "notes": "Gemma should call Nango send-discord-recap with {text}. The Discord webhook URL is stored in the Nango action, not in git. Rotate the webhook after the event because it was pasted in chat."
+}

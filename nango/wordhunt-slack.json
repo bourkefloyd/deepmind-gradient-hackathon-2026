@@ -1,0 +1,28 @@
+{
+  "integration_id": "slack",
+  "provider": "slack",
+  "end_user_id": "wordhunt-buzzer",
+  "connection_id": "82f94a5c-4116-41b3-8afe-8aeed24f714b",
+  "default_channel_id": "C0BUKC1AU06",
+  "default_channel_name": "new-channel",
+  "slack_team_name": "bourkefloyd",
+  "runtime_mcp_url": "https://api.nango.dev/mcp",
+  "management_mcp_url": "https://mcp.nango.dev/mcp",
+  "test_send_message": {
+    "ok": true,
+    "channel": "C0BUKC1AU06",
+    "ts": "1789242579.587919"
+  },
+  "actions": [
+    {
+      "name": "send-message",
+      "version": "3.0.1",
+      "input": ["channel_id", "text"]
+    },
+    {
+      "name": "list-channels",
+      "input": ["types", "cursor", "limit"]
+    }
+  ],
+  "notes": "Slack buzzer path is live. Gemma should call Nango send-message, not the Word Hunt server. Bot token and incoming-webhook URL stay in Nango; do not commit them."
+}
