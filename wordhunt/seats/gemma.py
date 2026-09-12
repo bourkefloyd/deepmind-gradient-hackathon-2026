@@ -96,10 +96,12 @@ class GemmaPolicy(WordQueuePolicy):
 
     # ---- model calls -------------------------------------------------------------------------
     async def _loop(self, board: str) -> None:
-        for _ in range(self.max_calls):
+        calls = 0
+        while calls < self.max_calls:
             if len(self._queue) >= 4:
                 await asyncio.sleep(0.5)
                 continue
+            calls += 1
             try:
                 text = await asyncio.to_thread(self._call, board)
             except Exception as e:  # network / parse; keep the seat alive
