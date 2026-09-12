@@ -13,11 +13,23 @@ Do this on the **website**, not in the desktop Agents window (the desktop compos
 1. Open [cursor.com/agents](https://cursor.com/agents) in a browser.
 2. Click the **+** button to the **left of the prompt bar** (next to the model picker). It is labeled for files, skills, and MCP servers.
 3. Hover **MCP Servers** → **Add MCP**.
-4. Add a custom server:
-   - Name: `lambda`
-   - If the form offers **stdio** / Command: `npx`, args `-y` `@strand-ai/lambda-mcp`, env `LAMBDA_API_KEY` = the Cloud Agent secret
-   - If the form only offers **HTTP URL**: skip MCP. There is no official Lambda HTTP MCP. Use the skill below instead.
-5. Enable `lambda` for new runs. This existing agent cannot pick it up mid-run.
+4. Add a custom **Command** server. Put **each** `npx` argument in its own Arguments row (or use Edit JSON). Do not put `-y` and the package name in one string.
+5. Paste this JSON (keep your existing `LAMBDA_API_KEY` secret value):
+
+```json
+{
+  "lambda": {
+    "command": "npx",
+    "args": ["-y", "@strand-ai/lambda-mcp"],
+    "env": {
+      "LAMBDA_API_KEY": "your-key"
+    }
+  }
+}
+```
+
+Wrong: `"args": ["-y @strand-ai/lambda-mcp"]` (one string). That makes `npx` fail and Cloud Agents report “failed during live tool discovery.”
+6. Save, then start a **new** Cloud Agent. This existing agent cannot pick up MCP config mid-run.
 
 ### Lambda Cloud without MCP
 
