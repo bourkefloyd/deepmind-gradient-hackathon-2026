@@ -98,3 +98,7 @@ Default unless overridden:
 
 - **Tap-to-build path for humans** (not swipe). Swipe is fussy over venue Wi-Fi and on unknown phones; tap is one event per tile and matches the AI hand's tile-by-tile cadence (section 11).
 - **Two human seats.** Two QR joiners is the spectacle the pitch promises ("two of you, play it") and keeps the humans-are-the-bar comparison honest (section 1).
+
+## Hosting (Cloud Run)
+
+`scripts/deploy.sh iter<N>` builds the image without Docker (crane onto `python:3.12-slim`) and deploys a tagged, no-traffic revision at `https://iter<N>---wordhunt-<hash>-uw.a.run.app`; `scripts/promote.sh iter<N>` moves the demo link. One instance, session affinity, 3600 s WebSocket timeout. **Rooms live in memory per revision**: each tag URL has its own rooms, and a deploy or promote resets them, so share the link of the build you are actually playing on and do not promote mid-round (`promote.sh` refuses while a room has connected humans; `FORCE=1` overrides). Health and the room list: `/api/health`.

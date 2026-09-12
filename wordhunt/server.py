@@ -51,7 +51,10 @@ BUILD = os.environ.get("WH_BUILD", "dev")
 @app.get("/api/health")
 async def healthz():
     s = get_solver()
-    return {"ok": True, "words": len(s.words), "rooms": len(rooms), "build": BUILD}
+    now = time.time()
+    return {"ok": True, "words": len(s.words), "build": BUILD, "rooms": len(rooms),
+            "room_list": [{"code": r.code, "state": r.state, "round": r.round_no, "humans": r.humans_connected,
+                           "seats": len(r.seats), "age_s": int(now - r.created_at)} for r in rooms.values()]}
 
 
 @app.get("/api/build")
@@ -101,7 +104,7 @@ async def ws_room(ws: WebSocket, code: str):
     room = rooms.get(code)
     await ws.accept()
     if room is None:
-        await ws.send_json({"type": "error", "error": "no such room", "fatal": True})
+        await ws.send_json({"type": "error", "error": "no such room", "code": code, "reason": "not_found", "fatal": True})
         await ws.close()
         return
     seat = None
@@ -121,7 +124,7 @@ async def ws_room(ws: WebSocket, code: str):
                 players[pid] = name
                 seat = room.add_human(pid, name, ws)
                 if seat is None:
-                    await ws.send_json({"type": "error", "error": f"Room is full ({room.n_humans} players)", "fatal": True})
+                    await ws.send_json({"type": "error", "error": f"Room is full ({room.n_humans} players)", "code": code, "reason": "full", "fatal": True})
                     await ws.close()
                     return
                 await ws.send_json({"type": "welcome", "player_id": pid, "seat_id": seat.seat_id, "name": seat.name})
