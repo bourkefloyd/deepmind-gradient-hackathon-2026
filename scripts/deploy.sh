@@ -99,6 +99,16 @@ if [[ "${RESPAN_ENABLED:-1}" == "1" ]]; then
     echo "warn: secret $RESPAN_SECRET_NAME not found (or no access); deploying without Respan tracing"
   fi
 fi
+# Gemma seat on the Lambda vLLM box: key from Secret Manager `gemma-lambda-api-key` (mounted as GEMMA_API_KEY)
+# whenever GEMMA_BASE_URL is set and the secret is readable; a plain GEMMA_API_KEY env wins if given.
+GEMMA_SECRET_NAME="${GEMMA_SECRET_NAME:-gemma-lambda-api-key}"
+if [[ -n "${GEMMA_BASE_URL:-}" && -z "${GEMMA_API_KEY:-}" ]]; then
+  if gcloud secrets versions access latest --secret "$GEMMA_SECRET_NAME" >/dev/null 2>&1; then
+    SECRETS="${SECRETS:+$SECRETS,}GEMMA_API_KEY=$GEMMA_SECRET_NAME:latest"
+  else
+    echo "warn: secret $GEMMA_SECRET_NAME not readable; Gemma seat will call $GEMMA_BASE_URL without a key"
+  fi
+fi
 if [[ -n "$SECRETS" ]]; then SECRET_FLAGS=(--update-secrets "$SECRETS"); fi
 
 SOURCE_FLAGS=(--source .)

@@ -13,6 +13,7 @@ import random
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from .base import WordQueuePolicy
@@ -187,6 +188,9 @@ def gemma_seats_from_env() -> list[dict]:
     for m in [x.strip() for x in os.environ.get("GEMMA_MODELS", "").split(",") if x.strip()]:
         short = m.split("/")[-1]
         sid = re.sub(r"[^a-z0-9]+", "-", short.lower()).strip("-")
-        out.append({"id": sid if sid.startswith("gemma") else "gemma-" + sid, "name": short, "model": m,
-                    "base_url": base, "api_key": key, "label": "gemma · text grid"})
+        pretty = re.sub(r"^gemma-(\d+)-(\w+?)-it$", lambda mm: f"Gemma {mm.group(1)} {mm.group(2).upper()}", short) if short.lower().startswith("gemma") else short
+        host = urllib.parse.urlparse(base).hostname or ""
+        where = "Lambda" if host.startswith("129.146.") or "lambda" in host else ("laptop" if host in ("localhost", "127.0.0.1") else host)
+        out.append({"id": sid if sid.startswith("gemma") else "gemma-" + sid, "name": os.environ.get("GEMMA_SEAT_NAME") or f"{pretty} · vLLM on {where}", "model": m,
+                    "base_url": base, "api_key": key, "label": "text grid · thinking off"})
     return out
