@@ -400,6 +400,45 @@ Any caller string works as a tag without code changes (`respan.respan_params("ge
 hard-wired to `gemma-seat`, so a `gemma-12b-lambda` span name would be a one-word change in
 `wordhunt/seats/gemma.py`.
 
+**Hosted-Gemma proxy mode works (2026-09-12 22:02 UTC, after credits were added).** The
+gateway hosts no Gemma 4 12B; the closest is the same-generation **Gemma 4 31B**
+(`deepinfra/google/gemma-4-31B-it`, $0.13/$0.38 per 1M tokens; alternates
+`together_ai/google/gemma-4-31B-it`, `openrouter/google/gemma-4-31b-it`; Gemma 3 12B exists as
+`openrouter/google/gemma-3-12b-it`). Verified with a handful of calls: smoke → `200` in 0.7 s,
+response headers `x-respan-log-id` / `x-respan-gateway-request-id`, span `ae4819c5…` on the Logs page
+with `cost 0.00000954`, `customer_identifier wordhunt-vs/commentator`, `span_name commentator`; the real
+commentator (`python -m integrations.commentator --once`) tool-called `send_discord_recap` through the
+gateway in 4.7 s; the streaming eval client (`GemmaSeatClient`, presence/repetition penalties,
+`enable_thinking=false`) returned 46 words in 10 s. The API-created custom provider path (our own
+vLLM as a Respan model) still 404s — see the retry note above; ask Respan (frank@respan.ai) if
+that matters later.
+
+**The split (decision):**
+
+| caller | route | why |
+|---|---|---|
+| Gemma 12B seat (`wordhunt/seats/gemma.py`, Mac bot `gemma_seat/bot.py`) | **our Lambda vLLM** (`GEMMA_BASE_URL=http://129.146.67.197:8000/v1`, `GEMMA_MODELS=google/gemma-4-12B-it`) in **`RESPAN_MODE=log`** | the Lambda rubric line: the seat must run on our GPU; log mode still puts every call on the Respan dashboard |
+| commentator (`integrations/commentator.py`) and nano-vs-gemma eval (`gemma_seat/eval.py`) | **Respan gateway, `RESPAN_MODE=proxy`**, `RESPAN_MODEL=deepinfra/google/gemma-4-31B-it` | the Respan gateway line: real proxying with cost, latency, fallbacks; a hosted Gemma 4 is fine for commentary and for the A/B against nano |
+
+Commentator env (Mac or wherever it runs; the game worker sets the same on the next tag if the
+commentator moves server-side):
+```
+RESPAN_ENABLED=1 RESPAN_MODE=proxy RESPAN_API_KEY=<respan-api-key> RESPAN_MODEL=deepinfra/google/gemma-4-31B-it
+# GEMMA_BASE_URL / GEMMA_API_KEY are ignored while proxying (Respan's credits pay the upstream);
+# optional: RESPAN_BASE_URL=https://api.respan.ai/api (default)
+python -m integrations.commentator --room CODE --server https://<host>
+```
+Eval: same four vars, then `python -m gemma_seat.eval …` → spans tagged `nano-vs-gemma-eval`.
+Seat on Cloud Run: `RESPAN_MODE=log` plus the `GEMMA_*` vars above (log mode ignores `RESPAN_MODEL`).
+Because one process holds one `RESPAN_MODE`, run the commentator as its own process (it already is).
+
+**Respan CLI note.** `npx @respan/cli setup gateway` is an interactive wizard: it stores the key,
+installs Respan skills/SDK docs for a coding agent and has that agent repoint the client — the
+resulting shape is exactly what `integrations/respan.py` does (`base_url https://api.respan.ai/api`,
+`Authorization: Bearer <RESPAN_API_KEY>`, `provider/model` slugs, tags via `extra_body`). `setup
+tracing` installs the `respan` SDK (OpenTelemetry instrumentation → `/api/v2/traces`) or a local OTel
+collector; our stdlib `POST /request-logs/create/` is Respan's documented no-SDK alternative and stays.
+
 **Verification.** `python -m unittest integrations.test_respan` (17 tests, mock gateway: headers,
 model, tags, override, disabled passthrough, both modes for all three callers);
 `scripts/respan_smoke.py` fires one tagged request and prints the `unique_id` + Logs URL.
