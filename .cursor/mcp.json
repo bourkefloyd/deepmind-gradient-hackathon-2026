@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "lambda": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@strand-ai/lambda-mcp"],
+      "env": {
+        "LAMBDA_API_KEY": "${env:LAMBDA_API_KEY}"
+      }
+    }
+  }
+}
