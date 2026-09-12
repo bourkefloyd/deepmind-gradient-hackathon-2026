@@ -1,0 +1,108 @@
+{
+ "boards": [
+  "triemisflnuleroe",
+  "uysugruplciouxlt",
+  "esnaritpaltegten",
+  "njninfeeoolbrtut",
+  "uuniqestunwnjozu",
+  "sbolotercesgscdq",
+  "cesvaiceeohelacy",
+  "ehrtuepxapthenje",
+  "linlghtenarhaeew",
+  "tniiqioajedmlnrt",
+  "lglstsezobryipge",
+  "rasmbcoteyctibek",
+  "stdmohteaapnwvua",
+  "rqoruoimenadhsrh",
+  "oadyfinfleaemaig",
+  "yoabraaimjlnpiiy",
+  "esihatqukpcieawe",
+  "peoehxusadestnrs",
+  "abtaeaatgddoxlul",
+  "npsrzruemotlsint"
+ ],
+ "rows": [
+  {
+   "seat": "random swiper",
+   "score": 1180.0,
+   "valid_rate": 0.04331864904552129,
+   "mean_len": 3.296480880230881,
+   "wpm": 4.52,
+   "cost": "$0",
+   "latency": "0 ms",
+   "params": "0",
+   "note": "floor",
+   "longest": "seral"
+  },
+  {
+   "seat": "nano d4 smoke (300 steps, 2k boards)",
+   "score": 5300.0,
+   "valid_rate": 0.4943127962085308,
+   "mean_len": 3.2854643770147276,
+   "wpm": 22.12,
+   "cost": "$0",
+   "latency": "0.8 ms / action",
+   "params": "3.3M",
+   "note": "smoke checkpoint",
+   "longest": "tours"
+  },
+  {
+   "seat": "**nano d6_s0** (17k steps, 200k boards)",
+   "score": 11245.0,
+   "valid_rate": 0.9584748961872405,
+   "mean_len": 3.4433374148033358,
+   "wpm": 36.12,
+   "cost": "$0",
+   "latency": "2.7 ms / action",
+   "params": "11.0M",
+   "note": "the hero seat",
+   "longest": "listen"
+  },
+  {
+   "seat": "Gemma 4 12B, text grid",
+   "score": 1780.0,
+   "valid_rate": 0.2,
+   "mean_len": 3.7941176470588234,
+   "wpm": 27.721645265258097,
+   "cost": "$0 (local mlx, Mac power)",
+   "latency": "2.1 s / call (~26 words)",
+   "params": "12B (4-bit)",
+   "note": "one call per board, T=0.2, thinking off"
+  },
+  {
+   "seat": "Gemma 4 12B, screenshot",
+   "score": 1200.0,
+   "valid_rate": 0.21621621621621623,
+   "mean_len": 3.5681818181818183,
+   "wpm": 28.470029999411775,
+   "cost": "$0 (local mlx, Mac power)",
+   "latency": "2.2 s / call (~20 words)",
+   "params": "12B (4-bit)",
+   "note": "one call per board, T=0.2, thinking off"
+  }
+ ],
+ "extra": [
+  {
+   "seat": "Gemma 4 12B, tile-index prompt",
+   "score": 25.0,
+   "valid_rate": 1.0,
+   "mean_len": 3.5,
+   "wpm": 0.38677986424026767,
+   "cost": "$0 (local mlx, Mac power)",
+   "latency": "15.5 s / call (~0 words)",
+   "params": "12B (4-bit)",
+   "note": "index prompt: 15 s / call, ~0 words"
+  },
+  {
+   "seat": "Gemma 4 12B, text + thinking on",
+   "score": 0.0,
+   "valid_rate": 0.0,
+   "mean_len": 0.0,
+   "wpm": 0.0,
+   "cost": "$0 (local mlx, Mac power)",
+   "latency": "30.0 s / call (~0 words)",
+   "params": "12B (4-bit)",
+   "note": "20/20 calls hit the 30 s timeout"
+  }
+ ]
+}
