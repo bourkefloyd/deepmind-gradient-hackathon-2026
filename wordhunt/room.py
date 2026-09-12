@@ -23,7 +23,8 @@ RACE_S = float(os.environ.get("WH_RACE_S", 75.0))
 HOTJOIN_S = float(os.environ.get("WH_HOTJOIN_S", 15.0))   # joiners inside this window play the current race
 INTEGRATIONS = os.environ.get("WH_INTEGRATIONS") == "1"
 TICKER_MAX = 60
-MAX_HUMANS = int(os.environ.get("WH_MAX_HUMANS", 24))
+MAX_HUMANS = int(os.environ.get("WH_MAX_HUMANS", 40))
+CURSOR_FLUSH_S = float(os.environ.get("WH_CURSOR_FLUSH_S", 0.1))   # human cursors are coalesced and fanned out at most this often
 COLORS = ["#ff5d5d", "#4da3ff", "#ffc93c", "#42d392", "#c77dff", "#ff9f43", "#2ec4b6", "#f368e0"]
 
 Send = Callable[[dict], Awaitable[None]]
@@ -105,6 +106,8 @@ class Room:
         self.spectators: set[Any] = set()
         self.recreated = False          # lobby re-made under a shared code after a deploy reset
         self.perf = {"broadcast_ms_max": 0.0, "broadcast_ms_last": 0.0, "tick_late_ms_max": 0.0}
+        self._pending_cursors: dict[str, dict] = {}
+        self._cursor_flushed_at = 0.0
         self._boards = load_packed_boards()
         self.rng.shuffle(self._boards)
         self.restored = False           # rehydrated from the room store after a deploy/restart
@@ -419,6 +422,12 @@ class Room:
         now = self.now()
         cursors: dict[str, dict] = {}
         ticks: list[dict] = []
+        # Human cursor moves arrive at ~10 Hz per player; with 30 players an immediate per-move broadcast
+        # is 30 x 10 x 31 sends/s. They are pooled here and fanned out with the AI cursors at <= 1/CURSOR_FLUSH_S.
+        if self._pending_cursors and now - self._cursor_flushed_at >= CURSOR_FLUSH_S:
+            cursors.update(self._pending_cursors)
+            self._pending_cursors = {}
+            self._cursor_flushed_at = now
         for s in self.seats.values():
             if not s.hand or s.queued:
                 continue
@@ -469,4 +478,8 @@ class Room:
 
     async def human_path(self, seat: Seat, path: list[int]) -> None:
         seat.cursor_path = path
-        await self.broadcast({"type": "cursors", "cursors": {seat.seat_id: {"path": path, "tile": path[-1] if path else None}}})
+        cur = {"path": path, "tile": path[-1] if path else None}
+        if self.state == "playing":
+            self._pending_cursors[seat.seat_id] = cur          # flushed by the round loop (_tick_ais)
+        else:
+            await self.broadcast({"type": "cursors", "cursors": {seat.seat_id: cur}})

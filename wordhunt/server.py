@@ -79,12 +79,24 @@ def _respan_status() -> dict:
         return {"enabled": False}
 
 
+def _proc_stats() -> dict:
+    """Process CPU seconds + RSS so a load test can derive utilisation from two samples."""
+    out = {"cpu_s": round(time.process_time(), 2), "uptime_s": round(time.time() - STARTED_AT, 1)}
+    try:
+        import resource
+        out["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+    except Exception:
+        pass
+    return out
+
+
+
 @app.get("/api/health")
 async def healthz():
     s = get_solver()
     now = time.time()
     from .seats import registry
-    return {"ok": True, "words": len(s.words), "build": BUILD, "rooms": len(rooms), "tuning": registry.tuning(),
+    return {"ok": True, "words": len(s.words), "build": BUILD, "rooms": len(rooms), "proc": _proc_stats(), "tuning": registry.tuning(),
             "uptime_s": int(now - STARTED_AT), "instance_id": INSTANCE_ID,
             "store": {"url": room_store().url, **room_store().stats},
             "lineup": [x.id for x in registry.lineup()], "respan": _respan_status(),
