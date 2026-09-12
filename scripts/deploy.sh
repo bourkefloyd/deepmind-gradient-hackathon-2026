@@ -38,7 +38,12 @@ if [[ -n "${GCP_SA_KEY_JSON:-}" ]]; then
   gcloud auth activate-service-account --key-file="$KEY_FILE" --quiet
   PROJECT="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["project_id"])' "$KEY_FILE")"
   gcloud config set project "$PROJECT" --quiet
+  # Run the revision as the deploying SA too, so secrets granted to it are readable at runtime.
+  RUN_SA="${RUN_SA:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["client_email"])' "$KEY_FILE")}"
 fi
+RUN_SA="${RUN_SA:-$(gcloud config get-value account 2>/dev/null)}"
+SA_FLAG=()
+if [[ "$RUN_SA" == *.gserviceaccount.com ]]; then SA_FLAG=(--service-account "$RUN_SA"); fi
 PROJECT="${PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
 echo "project=$PROJECT region=$REGION service=$SERVICE tag=$TAG build='$BUILD_LABEL' mode=$DEPLOY_MODE"
 
@@ -116,7 +121,7 @@ fi
 gcloud run deploy "$SERVICE" \
   "${SOURCE_FLAGS[@]}" \
   --region "$REGION" \
-  --allow-unauthenticated --no-invoker-iam-check \
+  --allow-unauthenticated --no-invoker-iam-check "${SA_FLAG[@]}" \
   --tag "$TAG" "${TRAFFIC_FLAG[@]}" \
   --set-env-vars "^|^$ENV_VARS" "${SECRET_FLAGS[@]}" \
   --min-instances 1 --max-instances 1 \
