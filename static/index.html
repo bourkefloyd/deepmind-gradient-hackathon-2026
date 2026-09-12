@@ -243,6 +243,9 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .addseat{display:flex;gap:8px;margin-top:10px}
 .addseat select{flex:1;font:inherit;font-size:15px;padding:10px;border-radius:10px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);min-height:44px}
 .addseat button{padding:10px 14px;font-size:15px;min-height:44px}
+.crowdrow{display:flex;gap:12px;align-items:center;margin-top:8px}
+.crowdrow button{padding:10px 14px;font-size:15px;min-height:44px}
+.crowdrow a{color:var(--muted);font-size:13px;white-space:nowrap}
 .stats{font-size:11px;color:var(--muted);margin-left:6px}
 .seats.many{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .seats.many .seat{padding:6px 8px;font-size:13px;gap:6px}
@@ -423,6 +426,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   <div class="col">
     <div class="card"><div class="card-h"><span>Seats</span><span class="r" id="lobbyCount"></span></div><div class="seats" id="lobbySeats"></div>
       <div class="addseat" id="addSeat"><select id="seatSel"></select><button id="btnAddSeat">Add seat</button></div>
+      <div class="crowdrow" id="crowdRow"><button id="btnCrowd" title="Five casual bots with random names — still AI, still badged 🤖">🎉 Add crowd (+5)</button><a href="#" id="btnUncrowd" class="hidden">Remove crowd</a></div>
       <div class="small" style="margin:10px 0 0">Projector view: <span id="lobbySpect" style="color:var(--ink)"></span> · <a href="/lab" target="_blank" rel="noopener" class="lab-link" style="color:var(--muted)">Lab (Deep Dive)</a></div>
     </div>
     <button id="btnStart" class="primary big">Start</button>
@@ -603,7 +607,7 @@ function renderMine(){const me=mySeat();$('myScore').textContent=fmtN(me?me.scor
 function render(prev){
   const st=S.state;const changed=!prev||prev.state!==st||prev.round!==S.round;
   if(SPECT){renderSpect(prev,changed);return}
-  if(st==='lobby'){show('lobby');const join=location.origin+'/r/'+S.code;$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=join;$('lobbyQr').src=QR(join,264);$('lobbySpect').textContent=location.origin+'/s/'+S.code;const h=isHost();$('lobbyCount').textContent=S.seats.length+' seated';$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false,h)).join('');$('lobbySeats').classList.toggle('many',S.seats.length>8);for(const b of $('lobbySeats').querySelectorAll('[data-rm]'))b.onclick=()=>send({type:'remove_seat',seat_id:b.dataset.rm});$('addSeat').classList.toggle('hidden',!h);const sel=$('seatSel');const cur=sel.value;sel.innerHTML=(S.catalog||[]).filter(c=>c.available).map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.label)}</option>`).join('');if(cur)sel.value=cur;$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h);$('lobbyNotice').classList.toggle('hidden',!(S.recreated||S.restored));if(S.recreated)$('lobbyNotice').textContent=`Room ${S.code} was reset by a server update — new lobby, same link`;else if(S.restored)$('lobbyNotice').textContent=`Room ${S.code} restored after a server update — same seats, same link`}
+  if(st==='lobby'){show('lobby');const join=location.origin+'/r/'+S.code;$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=join;$('lobbyQr').src=QR(join,264);$('lobbySpect').textContent=location.origin+'/s/'+S.code;const h=isHost();$('lobbyCount').textContent=S.seats.length+' seated';$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false,h)).join('');$('lobbySeats').classList.toggle('many',S.seats.length>8);for(const b of $('lobbySeats').querySelectorAll('[data-rm]'))b.onclick=()=>send({type:'remove_seat',seat_id:b.dataset.rm});$('addSeat').classList.toggle('hidden',!h);$('crowdRow').classList.toggle('hidden',!h);$('btnUncrowd').classList.toggle('hidden',!S.seats.some(s=>s.spec_id==='crowd'));const sel=$('seatSel');const cur=sel.value;sel.innerHTML=(S.catalog||[]).filter(c=>c.available).map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.label)}</option>`).join('');if(cur)sel.value=cur;$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h);$('lobbyNotice').classList.toggle('hidden',!(S.recreated||S.restored));if(S.recreated)$('lobbyNotice').textContent=`Room ${S.code} was reset by a server update — new lobby, same link`;else if(S.restored)$('lobbyNotice').textContent=`Room ${S.code} restored after a server update — same seats, same link`}
   else if(st==='countdown'){show('countdown');$('cdRound').textContent=S.round+(S.level?' · '+S.level.theme:'');$('cdSeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('');$('cdSeats').classList.toggle('many',S.seats.length>8)}
   else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers();buildMinis();renderBig()}show('play');$('playRound').textContent=S.round;$('themeTitle').textContent=levelTitle();$('nPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';const me=mySeat();$('hudWho').innerHTML=me?`${avatar(me)}<span>${esc(me.name)}</span>`:'';const q=!!(me&&me.queued);$('banner').classList.toggle('hidden',!q);if(q)$('banner').textContent="You're in for the next round — this race already started. Watch the board; Rematch seats you.";$('btnSubmit').disabled=q;$('btnClear').disabled=q;for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;if(changed&&me){for(const e of S.ticker)if(e.seat_id===ME&&e.ok)myWords.push([e.word,e.delta,e.t])}renderMine();renderScores();drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
   else if(st==='results'){show('results');$('resRound').textContent=S.round;if(S.level)$('resSub').textContent=levelTitle();buildBoard($('resBoard'),S.board,false);const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const many=seats.length>8;$('resCount').textContent=seats.length+' players';$('resSeats').classList.toggle('few',seats.length<=3);
@@ -702,6 +706,9 @@ function feedRow(e){const t=$('ticker');const s=S&&S.seats.find(x=>x.seat_id===e
 // ---------- buttons ----------
 $('btnCreate').onclick=createRoom;$('btnJoin').onclick=()=>joinRoom($('joinCode').value);$('joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')joinRoom($('joinCode').value)});
 $('btnStart').onclick=()=>send({type:'start'});$('btnAddSeat').onclick=()=>{const v=$('seatSel').value;if(v)send({type:'add_seat',spec_id:v})};$('btnRematch').onclick=()=>send({type:'rematch'});
+// Crowd: plain add_seat/remove_seat loops (server enforces the AI cap; crowd seats stay kind "ai").
+$('btnCrowd').onclick=()=>{for(let i=0;i<5;i++)send({type:'add_seat',spec_id:'crowd'})};
+$('btnUncrowd').onclick=e=>{e.preventDefault();for(const s of (S?S.seats:[]))if(s.spec_id==='crowd')send({type:'remove_seat',seat_id:s.seat_id})};
 $('lobbyLink').onclick=copyLink;$('btnCopy').onclick=copyLink;
 document.querySelector('#results a').onclick=e=>{e.preventDefault();leave()};
 

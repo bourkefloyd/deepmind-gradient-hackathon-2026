@@ -11,6 +11,7 @@ from ..solver import Solver
 from .base import Policy, RandomSwiperPolicy
 from .fake import FAKE_SEATS
 from .gemma import GemmaPolicy, gemma_seats_from_env
+from . import crowd
 from . import nano as nano_seat
 
 
@@ -22,6 +23,7 @@ class SeatSpec:
     make: Callable[[Solver, random.Random], tuple[Policy, HandProfile]]
     available: bool = True
     default: bool = False       # seated when a room is created (overridden by WH_SEATS)
+    namer: Callable[[random.Random, set[str]], str] | None = None   # per-seat display name (crowd)
 
     def public(self) -> dict:
         return {"id": self.id, "name": self.name, "label": self.label, "available": self.available}
@@ -39,7 +41,8 @@ NANO_PROFILE = HandProfile(hz=float(os.environ.get("WH_NANO_HZ", 10)), lag=(0.15
 def tuning() -> dict:
     """Live pace knobs, surfaced in /api/health so the deployed dial is visible."""
     keys = ("WH_SEATS", "NANO_CKPT", "WH_NANO_THINK", "WH_NANO_TEMPERATURE", "WH_NANO_HESITATE", "WH_NANO_HZ",
-            "WH_REFLEX_A_THINK", "WH_REFLEX_B_THINK", "WH_REFLEX_HESITATE", "WH_REFLEX_WRONG", "WH_GEMMA_THINK", "GEMMA_MODELS")
+            "WH_REFLEX_A_THINK", "WH_REFLEX_B_THINK", "WH_REFLEX_HESITATE", "WH_REFLEX_WRONG", "WH_GEMMA_THINK", "GEMMA_MODELS",
+            "WH_CROWD_THINK", "WH_CROWD_WRONG", "WH_MAX_AI", "WH_MAX_AI_CROWD")
     out = {k: os.environ.get(k, "(default)") for k in keys}
     out["nano_ckpt_resolved"] = nano_seat.ckpt_name()
     return out
@@ -66,6 +69,7 @@ def build_catalog() -> list[SeatSpec]:
                           "10M params · $0 · ~2 ms" + (" · trained on Lambda A100" if lambda_ckpt else " · CPU-trained fallback"),
                           lambda solver, rng: (nano_seat.NanoPolicy(rng=rng), NANO_PROFILE),
                           available=nano_seat.available(), default=True))
+    specs.append(SeatSpec("crowd", "Crowd", "casual bot · random name", crowd.make, namer=crowd.pick_name))
 
     for g in gemma_seats_from_env():
         specs.append(SeatSpec(g["id"], g.get("name", g["id"]), g.get("label", "gemma"),

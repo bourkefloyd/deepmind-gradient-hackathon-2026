@@ -24,6 +24,8 @@ HOTJOIN_S = float(os.environ.get("WH_HOTJOIN_S", 15.0))   # joiners inside this 
 INTEGRATIONS = os.environ.get("WH_INTEGRATIONS") == "1"
 TICKER_MAX = 60
 MAX_HUMANS = int(os.environ.get("WH_MAX_HUMANS", 40))
+MAX_AI = int(os.environ.get("WH_MAX_AI", 6))                 # catalog seats (nano, reflex, gemma)
+MAX_AI_CROWD = int(os.environ.get("WH_MAX_AI_CROWD", 12))    # total AI seats once the host adds a crowd
 CURSOR_FLUSH_S = float(os.environ.get("WH_CURSOR_FLUSH_S", 0.1))   # human cursors are coalesced and fanned out at most this often
 COLORS = ["#ff5d5d", "#4da3ff", "#ffc93c", "#42d392", "#c77dff", "#ff9f43", "#2ec4b6", "#f368e0"]
 
@@ -56,7 +58,7 @@ class Seat:
         d = {
             "seat_id": self.seat_id, "name": self.name, "kind": self.kind, "color": self.color,
             "score": self.score, "n_words": len(self.found), "connected": self.connected,
-            "queued": self.queued, "label": self.label,
+            "queued": self.queued, "label": self.label, "spec_id": self.spec_id,
         }
         if self.hand and hasattr(self.hand.policy, "public_stats"):
             try:
@@ -184,13 +186,17 @@ class Room:
     def add_from_catalog(self, spec_id: str) -> Seat | None:
         spec = registry.find(spec_id)
         n_ai = sum(1 for s in self.seats.values() if s.kind == "ai")
-        if spec is None or not spec.available or n_ai >= 6:
+        if spec is None or not spec.available or n_ai >= (MAX_AI_CROWD if spec_id == "crowd" else MAX_AI):
             return None
         n = sum(1 for s in self.seats.values() if s.spec_id == spec_id)
         seat_id = f"ai:{spec_id}" + (f"-{n + 1}" if n else "")
-        name = spec.name + (f" {n + 1}" if n else "")
+        while seat_id in self.seats:                      # add/remove churn (crowd) leaves gaps in the numbering
+            n += 1
+            seat_id = f"ai:{spec_id}-{n + 1}"
+        rng = random.Random(self.rng.random())
+        name = spec.namer(rng, {s.name for s in self.seats.values()}) if spec.namer else spec.name + (f" {n + 1}" if n else "")
         try:
-            policy, profile = spec.make(self.solver, random.Random(self.rng.random()))
+            policy, profile = spec.make(self.solver, rng)
         except Exception:
             return None
         return self.add_ai(seat_id, name, policy, profile, label=spec.label, spec_id=spec_id)
