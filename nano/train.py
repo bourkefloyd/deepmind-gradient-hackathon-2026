@@ -107,6 +107,8 @@ def train(
     val_every: int = 500,
     out_dir: Optional[str] = None,
     init: Optional[str] = None,
+    amp: bool = False,
+    compile: bool = False,
 ) -> tuple[NanoAgent, dict[str, Any]]:
     device = tr.device
     torch.manual_seed(seed)
@@ -118,7 +120,10 @@ def train(
         model = NanoAgent(ModelConfig(depth=depth)).to(device)
     lr = lr or 3e-4 * (4 / depth) ** 0.5  # nanochat-style: smaller models take larger lr
     opt = torch.optim.AdamW(model.parameters(), lr=lr, betas=(0.9, 0.95), weight_decay=0.1)
-    log(f"model depth {model.cfg.depth} d_model {model.cfg.d_model} params {model.n_params() / 1e6:.2f}M lr {lr:.2e} batch {batch_size} steps {steps} budget {budget_min} min")
+    # bf16 autocast only where it is a free win (CUDA), as in the nanoagent recipe; CPU/MPS stay fp32
+    use_amp = bool(amp) and device.type == "cuda"
+    fwd = torch.compile(model) if compile else model  # `model` keeps the plain state_dict for saving
+    log(f"model depth {model.cfg.depth} d_model {model.cfg.d_model} params {model.n_params() / 1e6:.2f}M lr {lr:.2e} batch {batch_size} steps {steps} budget {budget_min} min amp {use_amp} compile {compile}")
     t0 = time.time()
     losses: list[float] = []
     curve: list[dict[str, Any]] = []
@@ -140,8 +145,9 @@ def train(
             grp["lr"] = cur_lr
         idx = torch.randint(0, tr.n, (batch_size,), generator=g).to(device)
         batch, labels = tr.batch(idx)
-        out = model(batch)
-        L = compute_loss(out, labels)
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_amp):
+            out = fwd(batch)
+            L = compute_loss(out, labels)
         if not torch.isfinite(L["loss"]):
             nonfinite += 1
             step += 1
@@ -179,6 +185,8 @@ def train(
         "final_loss": float(np.mean(losses[-50:])) if losses else None,
         "nonfinite_steps": nonfinite,
         "device": str(device),
+        "amp": use_amp,
+        "compile": bool(compile),
         "lr": lr,
         "batch_size": batch_size,
         "n_train": tr.n,
@@ -212,10 +220,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--val-every", type=int, default=500)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--init", default=None)
+    ap.add_argument("--amp", action="store_true", help="bf16 autocast (CUDA only; ignored elsewhere)")
+    ap.add_argument("--compile", action="store_true", help="torch.compile the model (CUDA; ~20 s warm-up)")
     a = ap.parse_args(argv)
 
     device = torch_device(a.device)
     print(f"Device: {device} (requested {a.device!r})")
+    if device.type == "cuda":
+        # fp32 sgemm is the bottleneck on Ampere (19.5 TFLOPS); TF32 keeps fp32 storage/accumulation with 10-bit
+        # mantissa inputs (8x on the matmuls). Still no bf16 autocast, so CPU/MPS/CUDA runs stay comparable.
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        print("cuda: TF32 matmuls enabled")
     out_dir = a.out or os.path.join("runs", f"{os.path.splitext(os.path.basename(a.data))[0]}_d{a.depth}")
     os.makedirs(out_dir, exist_ok=True)
     logf = open(os.path.join(out_dir, "train.log"), "a")
@@ -233,7 +249,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     tr = DeviceData(tr_np, device)
     va = DeviceData(va_np, device) if va_np is not None and len(va_np["value"]) else None
     log(f"data {a.data}: {len(d['value'])} samples, train {tr.n} val {va.n if va else 0} (loaded+encoded in {time.time() - t0:.1f}s)")
-    model, info = train(tr, va, a.depth, a.steps, a.batch_size, a.lr, a.budget_min, a.seed, log, a.val_every, out_dir, a.init)
+    model, info = train(tr, va, a.depth, a.steps, a.batch_size, a.lr, a.budget_min, a.seed, log, a.val_every, out_dir, a.init, a.amp, a.compile)
     model.save(os.path.join(out_dir, "model.pt"), extra={"train": {k: v for k, v in info.items() if k != "curve"}, "args": vars(a)})
     with open(os.path.join(out_dir, "train.json"), "w") as f:
         json.dump({**info, "args": vars(a)}, f, indent=1)

@@ -73,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ticks", type=int, default=int(MATCH_S * HAND_HZ))
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--extra", action="append", default=[], metavar="NAME=PATH[=NOTE]", help="extra nano checkpoints to play as rows")
     a = ap.parse_args(argv)
 
     boards = league_boards()
@@ -96,6 +97,11 @@ def main(argv: list[str] | None = None) -> int:
     m6, _ = NanoAgent.load(d6)
     sp6 = bench(d6, n=200)["ms_per_action"]
     played("**nano d6_s0** (17k steps, 200k boards)", StudentPolicy(m6, device, a.temperature, a.seed), f"{m6.n_params() / 1e6:.1f}M", f"{sp6:.1f} ms / action", "the hero seat")
+
+    for spec in a.extra:
+        name, path, *note = spec.split("=")
+        me, _ = NanoAgent.load(path)
+        played(name, StudentPolicy(me, device, a.temperature, a.seed), f"{me.n_params() / 1e6:.1f}M", f"{bench(path, n=200)['ms_per_action']:.1f} ms / action", note[0] if note else "")
 
     g = json.load(open("gemma_seat/results/eval_n20_seed0.json"))["summary"]
     rows.append(gemma_row("Gemma 4 12B, text grid", g["text"], "12B (4-bit)", "one call per board, T=0.2, thinking off"))
@@ -155,8 +161,9 @@ def main(argv: list[str] | None = None) -> int:
         import matplotlib.pyplot as plt
 
         names = [r["seat"].replace("**", "").split(" (")[0] for r in rows]
-        fig, ax = plt.subplots(1, 2, figsize=(10, 3.6))
+        fig, ax = plt.subplots(1, 2, figsize=(10, fig_h))
         colors = ["#999999"] + ["#1f77b4"] * (len(rows) - 3) + ["#ff7f0e", "#ff7f0e"]
+        fig_h = 3.6 + 0.35 * max(0, len(rows) - 5)
         ax[0].barh(names, [r["score"] for r in rows], color=colors)
         ax[0].set_title("score / board (20 boards, 75 s)")
         ax[0].invert_yaxis()

@@ -37,11 +37,13 @@ TYPES = ("extend", "submit", "abort")
 UNCOMMON_WEIGHT = 0.01
 
 
-def word_weight(word: str, ranks: dict[str, int]) -> float:
+def word_weight(word: str, ranks: dict[str, int], len_bonus: float = 1.0) -> float:
+    """Frequency weight; `len_bonus` > 1 multiplies by len_bonus ** (len - 3) (curriculum toward longer words)."""
     r = ranks.get(word)
-    if r is None:
-        return UNCOMMON_WEIGHT
-    return 1.0 / (1.0 + r / 3000.0)
+    w = UNCOMMON_WEIGHT if r is None else 1.0 / (1.0 + r / 3000.0)
+    if len_bonus != 1.0:
+        w *= len_bonus ** (len(word) - 3)
+    return w
 
 
 def letter_distribution(words: Iterable[str]) -> np.ndarray:
@@ -57,7 +59,7 @@ def random_board(rng: np.random.Generator, letter_p: np.ndarray) -> str:
 PrefixInfo = dict[tuple[int, ...], tuple[float, dict[int, float]]]
 
 
-def annotate(board: str, solver: Solver, ranks: dict[str, int]) -> tuple[PrefixInfo, int]:
+def annotate(board: str, solver: Solver, ranks: dict[str, int], len_bonus: float = 1.0) -> tuple[PrefixInfo, int]:
     """Every valid prefix path on the board -> (weight of the prefix as a word, {next tile: completion mass}).
     Returns (info, n_words). Prefix paths with zero completion mass are absent (= dead)."""
     info: PrefixInfo = {}
@@ -67,7 +69,7 @@ def annotate(board: str, solver: Solver, ranks: dict[str, int]) -> tuple[PrefixI
         nonlocal n_words
         w_word = 0.0
         if node.word is not None:
-            w_word = word_weight(node.word, ranks)
+            w_word = word_weight(node.word, ranks, len_bonus)
             n_words += 1
         kids: dict[int, float] = {}
         if len(path) < MAX_LEN:
@@ -117,8 +119,8 @@ def legal_moves(path: tuple[int, ...]) -> list[int]:
     return [j for j in NEIGHBORS[path[-1]] if j not in path]
 
 
-def board_samples(board: str, solver: Solver, ranks: dict[str, int], rng: np.random.Generator, n_paths: int, dead_frac: float, min_words: int) -> list[tuple] | None:
-    info, n_words = annotate(board, solver, ranks)
+def board_samples(board: str, solver: Solver, ranks: dict[str, int], rng: np.random.Generator, n_paths: int, dead_frac: float, min_words: int, len_bonus: float = 1.0) -> list[tuple] | None:
+    info, n_words = annotate(board, solver, ranks, len_bonus)
     if n_words < min_words or () not in info:
         return None
     prefixes: set[tuple[int, ...]] = set()
@@ -218,7 +220,7 @@ def _init_worker() -> None:
 
 
 def _work(args: tuple) -> dict[str, np.ndarray]:
-    seed, bid0, n_boards, n_paths, dead_frac, min_words = args
+    seed, bid0, n_boards, n_paths, dead_frac, min_words, len_bonus = args
     if not _W:
         _init_worker()
     rng = np.random.default_rng(seed)
@@ -227,7 +229,7 @@ def _work(args: tuple) -> dict[str, np.ndarray]:
     made = 0
     while made < n_boards:
         board = random_board(rng, _W["letter_p"])
-        rows = board_samples(board, _W["solver"], _W["ranks"], rng, n_paths, dead_frac, min_words)
+        rows = board_samples(board, _W["solver"], _W["ranks"], rng, n_paths, dead_frac, min_words, len_bonus)
         if rows is None:
             continue
         parts.append(pack(rows, bid))
@@ -236,10 +238,10 @@ def _work(args: tuple) -> dict[str, np.ndarray]:
     return {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
 
 
-def generate(n_boards: int, n_paths: int = 6, dead_frac: float = 0.3, min_words: int = 15, seed: int = 0, workers: int = 0, chunk: int = 500) -> dict[str, np.ndarray]:
+def generate(n_boards: int, n_paths: int = 6, dead_frac: float = 0.3, min_words: int = 15, seed: int = 0, workers: int = 0, chunk: int = 500, len_bonus: float = 1.0) -> dict[str, np.ndarray]:
     jobs = []
     for i, start in enumerate(range(0, n_boards, chunk)):
-        jobs.append((seed * 1_000_003 + i, start, min(chunk, n_boards - start), n_paths, dead_frac, min_words))
+        jobs.append((seed * 1_000_003 + i, start, min(chunk, n_boards - start), n_paths, dead_frac, min_words, len_bonus))
     if workers <= 1:
         parts = [_work(j) for j in jobs]
     else:
@@ -262,11 +264,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dead-frac", type=float, default=0.3, help="P(mine one dead continuation next to each valid prefix)")
     ap.add_argument("--min-words", type=int, default=15, help="reject boards with fewer words")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--len-bonus", type=float, default=1.0, help="multiply word weight by len_bonus**(len-3): > 1 tilts the curriculum toward longer words")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     t0 = time.time()
-    d = generate(a.boards, a.paths, a.dead_frac, a.min_words, a.seed, a.workers)
+    d = generate(a.boards, a.paths, a.dead_frac, a.min_words, a.seed, a.workers, len_bonus=a.len_bonus)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     np.savez(a.out, **d)
     n = len(d["value"])
