@@ -269,6 +269,7 @@ class Room:
             "state": self.state,
             "round": self.round_no,
             "level": self.level.public() if self.level else None,
+            "next_level": (lambda nl: nl.public() if nl else None)(level_for_round(get_levels(), self.round_no + 1)) if self.state in ("lobby", "results") else None,
             "host_id": self.host_id,
             "board": self.board if self.state in ("playing", "results") else "",
             "n_board_words": len(self.words) if self.state in ("playing", "results") else 0,

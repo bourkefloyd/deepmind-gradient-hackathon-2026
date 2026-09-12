@@ -100,9 +100,15 @@ input.code{text-transform:uppercase;letter-spacing:6px;font-weight:700;text-alig
 .hud .who .av{width:28px;height:28px;font-size:14px}
 .hud .word{font-size:clamp(18px,5.5vw,24px);font-weight:800;letter-spacing:2px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue);min-height:28px}
 .hud .score{font-size:22px;font-weight:800;color:var(--ink);min-width:44px;text-align:right}
-.theme{text-align:center;font-weight:700;color:var(--gold);font-size:clamp(15px,4.5vw,20px);letter-spacing:.5px;margin:0 0 8px;min-height:0}
+.theme{text-align:center;font-weight:700;color:var(--gold);font-size:clamp(15px,4.5vw,20px);letter-spacing:.5px;margin:0 0 8px;min-height:0;
+  background:rgba(245,179,1,.10);border:1px solid rgba(245,179,1,.45);border-radius:12px;padding:8px 12px;position:sticky;top:0;z-index:5;backdrop-filter:blur(6px)}
 .theme:empty{display:none}
-.sp-left .theme{font-size:clamp(18px,1.6vw,44px)}
+.theme .lvl{display:block;font-size:.72em;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:700}
+.theme .th{display:block;font-size:1.35em;line-height:1.15}
+.theme .hint{display:block;font-size:.78em;font-weight:500;color:var(--ink);opacity:.9;margin-top:2px;letter-spacing:0}
+.sp-left .theme{font-size:clamp(14px,1.15vw,28px);position:static;flex:none;width:100%;max-width:min(60vh,100%);padding:6px 12px}
+.joinhint{text-align:center;font-size:16px;color:var(--ink);margin:6px 0 10px;line-height:1.45}
+.joinhint b{color:var(--gold);word-break:break-all}
 .boardwrap{position:relative;width:100%;aspect-ratio:1;max-width:min(100%,66vh,66dvh);margin:0 auto;touch-action:none}
 .board{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(6px,2vw,10px);width:100%;height:100%;touch-action:none}
 .tile{background:var(--tile);color:var(--tile-ink);border-radius:clamp(10px,3.5vw,16px);display:flex;align-items:center;justify-content:center;font-size:clamp(30px,11vw,56px);line-height:1;min-height:0;font-weight:900;text-transform:uppercase;box-shadow:inset 0 -4px 0 rgba(0,0,0,.18),0 2px 0 rgba(0,0,0,.3);position:relative;cursor:pointer}
@@ -417,7 +423,9 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
     <div class="card hero-card">
       <div class="small" style="margin-top:0">Word Hunt VS · room code</div>
       <div class="codebig" id="lobbyCode"></div>
+      <div class="joinhint" id="lobbyJoinHint"></div>
       <div class="link" id="lobbyLink"></div>
+      <div class="theme" id="lobbyTheme"></div>
       <img class="qr" id="lobbyQr" alt="QR to join">
       <div class="small">Scan or share the link · humans vs. models</div>
       <div class="name-edit" style="margin:10px 0 0">You are <b id="nameEdit2" contenteditable="true" spellcheck="false"></b></div>
@@ -439,6 +447,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   <div class="small">Round <span id="cdRound"></span> starts in</div>
   <div class="count" id="cdNum">20</div>
   <div class="small">Get your thumb ready. Swipe across adjacent tiles, or tap them one by one and tap the last tile again to submit.</div>
+  <div class="theme" id="cdTheme"></div>
   <div class="card"><div class="seats" id="cdSeats"></div></div>
 </section>
 
@@ -554,6 +563,7 @@ function now(){return Date.now()/1000+offset}
 function isHost(){return S&&S.host_id===PID}
 function mySeat(){return S&&S.seats.find(s=>s.seat_id===ME)}
 function levelTitle(){return S&&S.level?`Level ${S.level.n} · ${S.level.theme}`:''}
+function levelBanner(lv,prefix){if(!lv)return '';return `<span class="lvl">${esc(prefix||'')}Level ${lv.n} · Theme</span><span class="th">${esc(lv.theme)}</span>${lv.hint?`<span class="hint">${esc(lv.hint)}</span>`:''}`}
 let toastT=null;function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('on'),1400)}
 function copyLink(){const u=location.origin+'/r/'+S.code;if(navigator.clipboard)navigator.clipboard.writeText(u).then(()=>toast('Link copied'),()=>toast(u));else toast(u)}
 
@@ -607,10 +617,10 @@ function renderMine(){const me=mySeat();$('myScore').textContent=fmtN(me?me.scor
 function render(prev){
   const st=S.state;const changed=!prev||prev.state!==st||prev.round!==S.round;
   if(SPECT){renderSpect(prev,changed);return}
-  if(st==='lobby'){show('lobby');const join=location.origin+'/r/'+S.code;$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=join;$('lobbyQr').src=QR(join,264);$('lobbySpect').textContent=location.origin+'/s/'+S.code;const h=isHost();$('lobbyCount').textContent=S.seats.length+' seated';$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false,h)).join('');$('lobbySeats').classList.toggle('many',S.seats.length>8);for(const b of $('lobbySeats').querySelectorAll('[data-rm]'))b.onclick=()=>send({type:'remove_seat',seat_id:b.dataset.rm});$('addSeat').classList.toggle('hidden',!h);$('crowdRow').classList.toggle('hidden',!h);$('btnUncrowd').classList.toggle('hidden',!S.seats.some(s=>s.spec_id==='crowd'));const sel=$('seatSel');const cur=sel.value;sel.innerHTML=(S.catalog||[]).filter(c=>c.available).map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.label)}</option>`).join('');if(cur)sel.value=cur;$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h);$('lobbyNotice').classList.toggle('hidden',!(S.recreated||S.restored));if(S.recreated)$('lobbyNotice').textContent=`Room ${S.code} was reset by a server update — new lobby, same link`;else if(S.restored)$('lobbyNotice').textContent=`Room ${S.code} restored after a server update — same seats, same link`}
-  else if(st==='countdown'){show('countdown');$('cdRound').textContent=S.round+(S.level?' · '+S.level.theme:'');$('cdSeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('');$('cdSeats').classList.toggle('many',S.seats.length>8)}
-  else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers();buildMinis();renderBig()}show('play');$('playRound').textContent=S.round;$('themeTitle').textContent=levelTitle();$('nPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';const me=mySeat();$('hudWho').innerHTML=me?`${avatar(me)}<span>${esc(me.name)}</span>`:'';const q=!!(me&&me.queued);$('banner').classList.toggle('hidden',!q);if(q)$('banner').textContent="You're in for the next round — this race already started. Watch the board; Rematch seats you.";$('btnSubmit').disabled=q;$('btnClear').disabled=q;for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;if(changed&&me){for(const e of S.ticker)if(e.seat_id===ME&&e.ok)myWords.push([e.word,e.delta,e.t])}renderMine();renderScores();drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
-  else if(st==='results'){show('results');$('resRound').textContent=S.round;if(S.level)$('resSub').textContent=levelTitle();buildBoard($('resBoard'),S.board,false);const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const many=seats.length>8;$('resCount').textContent=seats.length+' players';$('resSeats').classList.toggle('few',seats.length<=3);
+  if(st==='lobby'){show('lobby');const join=location.origin+'/r/'+S.code;$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=join;$('lobbyJoinHint').innerHTML=`Join at <b>${esc(join.replace(/^https?:\/\//,''))}</b><br>or scan the QR`;$('lobbyTheme').innerHTML=levelBanner(S.next_level,'Next up: ');$('lobbyQr').src=QR(join,264);$('lobbySpect').textContent=location.origin+'/s/'+S.code;const h=isHost();$('lobbyCount').textContent=S.seats.length+' seated';$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false,h)).join('');$('lobbySeats').classList.toggle('many',S.seats.length>8);for(const b of $('lobbySeats').querySelectorAll('[data-rm]'))b.onclick=()=>send({type:'remove_seat',seat_id:b.dataset.rm});$('addSeat').classList.toggle('hidden',!h);$('crowdRow').classList.toggle('hidden',!h);$('btnUncrowd').classList.toggle('hidden',!S.seats.some(s=>s.spec_id==='crowd'));const sel=$('seatSel');const cur=sel.value;sel.innerHTML=(S.catalog||[]).filter(c=>c.available).map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.label)}</option>`).join('');if(cur)sel.value=cur;$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h);$('lobbyNotice').classList.toggle('hidden',!(S.recreated||S.restored));if(S.recreated)$('lobbyNotice').textContent=`Room ${S.code} was reset by a server update — new lobby, same link`;else if(S.restored)$('lobbyNotice').textContent=`Room ${S.code} restored after a server update — same seats, same link`}
+  else if(st==='countdown'){show('countdown');$('cdRound').textContent=S.round+(S.level?' · '+S.level.theme:'');$('cdTheme').innerHTML=levelBanner(S.level);$('cdSeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('');$('cdSeats').classList.toggle('many',S.seats.length>8)}
+  else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers();buildMinis();renderBig()}show('play');$('playRound').textContent=S.round;$('themeTitle').innerHTML=levelBanner(S.level);$('nPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';const me=mySeat();$('hudWho').innerHTML=me?`${avatar(me)}<span>${esc(me.name)}</span>`:'';const q=!!(me&&me.queued);$('banner').classList.toggle('hidden',!q);if(q)$('banner').textContent="You're in for the next round — this race already started. Watch the board; Rematch seats you.";$('btnSubmit').disabled=q;$('btnClear').disabled=q;for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;if(changed&&me){for(const e of S.ticker)if(e.seat_id===ME&&e.ok)myWords.push([e.word,e.delta,e.t])}renderMine();renderScores();drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
+  else if(st==='results'){show('results');$('resRound').textContent=S.round;if(S.level)$('resSub').innerHTML=`${esc(levelTitle())}${S.level.hint?' — '+esc(S.level.hint):''}`;buildBoard($('resBoard'),S.board,false);const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const many=seats.length>8;$('resCount').textContent=seats.length+' players';$('resSeats').classList.toggle('few',seats.length<=3);
     const rcard=(s,i)=>{const w=s.words||[];const best=w[0];const others=w.slice(1,many?3:5);const more=w.length-1-others.length;return `<div class="rcard${i===0?' first':''}${s.seat_id===ME?' me':''}">${i===0?'<span class="crown">👑</span>':''}${medal(i)}${avatar(s)}<div class="nm">${esc(s.name)}</div><div>${badge(s)}</div><div class="rscore">${fmtN(s.score)}</div><div class="rw">${w.length} word${w.length===1?'':'s'}</div>${best?`<div class="bestbox"><small>Best word</small><b>${esc(best[0])}</b><span>(${fmtN(best[1])})</span></div>`:'<div class="bestbox"><small>No words yet</small><b>—</b></div>'}${others.length?`<div class="others"><small>Other words</small><div class="chips">${others.map(([w])=>`<span class="chip">${esc(w)}</span>`).join('')}${more>0?`<span class="chip more">+${more}</span>`:''}</div></div>`:''}</div>`};
     // 8+ players: top-3 podium cards, everyone else in a compact table (you highlighted)
     const podium=many?seats.slice(0,3):seats;$('resSeats').classList.toggle('few',podium.length<=3);$('resSeats').innerHTML=podium.map(rcard).join('');
@@ -626,7 +636,7 @@ function renderSpSeats(){const reveal=S.state==='results';const seats=[...S.seat
 function renderSpect(prev,changed){show('spect');const st=S.state;$('spCode').textContent=S.code;const join=location.origin+'/r/'+S.code;$('spJoin').textContent=join.replace(/^https?:\/\//,'');$('spQr').src=QR(join,400);const l=$('spLive');l.classList.toggle('on',st==='playing');l.lastElementChild.textContent=LIVE[st]||'';
   const slot=$('spBoardSlot');if(!slot.contains($('boardwrap'))){slot.appendChild($('boardwrap'));$('spTickerSlot').appendChild($('ticker'))}
   const showBoard=st==='playing'||st==='results';$('boardwrap').classList.toggle('hidden',!showBoard);slot.classList.toggle('hidden',!showBoard);$('ticker').classList.toggle('hidden',!showBoard);$('spFeedTitle').classList.toggle('hidden',!showBoard);
-  $('spStats').classList.toggle('hidden',st!=='playing');$('spBig').classList.toggle('hidden',st==='playing');$('spPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';$('spRoundN').textContent=S.round;$('spThemeTitle').textContent=(st==='playing'||st==='results')?levelTitle():'';
+  $('spStats').classList.toggle('hidden',st!=='playing');$('spBig').classList.toggle('hidden',st==='playing');$('spPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';$('spRoundN').textContent=S.round;$('spThemeTitle').innerHTML=st==='lobby'?levelBanner(S.next_level,'Next up: '):levelBanner(S.level);
   if(st!=='playing'&&st!=='results')$('spBigCard').classList.add('hidden');
   if(st==='lobby'){$('spBig').textContent='Waiting';$('spBig').classList.remove('low');$('spNote').textContent='Scan to join. The host presses Start.'}
   else if(st==='countdown'){$('spBig').textContent=Math.ceil(Math.max(0,S.phase_ends_at-now()));$('spBig').classList.remove('low');$('spNote').textContent='Round '+S.round+' starts in'}

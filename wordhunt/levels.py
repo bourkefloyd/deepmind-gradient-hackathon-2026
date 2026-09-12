@@ -31,9 +31,10 @@ class Level:
     seed_words: list[str] = field(default_factory=list)
     notes: str = ""
     stats: dict = field(default_factory=dict)
+    hint: str = ""
 
     def public(self) -> dict:
-        return {"n": self.n, "theme": self.theme}
+        return {"n": self.n, "theme": self.theme, "hint": self.hint}
 
 
 def board_stats(board: str, solver: Solver, words: dict[str, list[int]] | None = None,
@@ -91,7 +92,7 @@ def load_levels(path: str | None = None) -> list[Level]:
             continue
         levels.append(Level(int(d.get("n", i)), str(d.get("theme", f"Level {i}")), board,
                             [str(w).lower() for w in d.get("seed_words", [])], str(d.get("notes", "")),
-                            dict(d.get("stats", {}))))
+                            dict(d.get("stats", {})), str(d.get("hint", ""))))
     return levels
 
 

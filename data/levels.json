@@ -23,7 +23,8 @@
     "pot",
     "plate"
    ]
-  }
+  },
+  "hint": "words hide around cooking, food and utensils"
  },
  {
   "n": 2,
@@ -51,7 +52,8 @@
     "rat",
     "seal"
    ]
-  }
+  },
+  "hint": "creatures big and small — think pets, jungle, farm"
  },
  {
   "n": 3,
@@ -77,7 +79,8 @@
     "moon",
     "planet"
    ]
-  }
+  },
+  "hint": "planets, stars and things that orbit"
  },
  {
   "n": 4,
@@ -103,7 +106,8 @@
     "heat",
     "sea"
    ]
-  }
+  },
+  "hint": "sand, waves, sun and seaside gear"
  },
  {
   "n": 5,
@@ -131,7 +135,8 @@
     "tone",
     "horn"
    ]
-  }
+  },
+  "hint": "notes, rhythm, instruments and singing"
  },
  {
   "n": 6,
@@ -157,7 +162,8 @@
     "dive",
     "net"
    ]
-  }
+  },
+  "hint": "balls, goals, moves and the gym"
  },
  {
   "n": 7,
@@ -183,7 +189,8 @@
     "tree",
     "bean"
    ]
-  }
+  },
+  "hint": "plants, tools and things that grow"
  },
  {
   "n": 8,
@@ -211,7 +218,8 @@
     "ice",
     "sun"
    ]
-  }
+  },
+  "hint": "sun, rain, ice and the sky's moods"
  },
  {
   "n": 9,
@@ -237,7 +245,8 @@
     "teal",
     "pink"
    ]
-  }
+  },
+  "hint": "shades and hues — paint the grid"
  },
  {
   "n": 10,
@@ -265,7 +274,8 @@
     "toe",
     "skin"
    ]
-  }
+  },
+  "hint": "parts of you, head to toe"
  },
  {
   "n": 11,
@@ -291,7 +301,8 @@
     "pen",
     "desk"
    ]
-  }
+  },
+  "hint": "desks, pens, classes and homework"
  },
  {
   "n": 12,
@@ -317,7 +328,8 @@
     "lane",
     "store"
    ]
-  }
+  },
+  "hint": "streets, shops, cafes and traffic"
  },
  {
   "n": 13,
@@ -343,7 +355,8 @@
     "silo",
     "gate"
    ]
-  }
+  },
+  "hint": "crops, barns, animals and harvest"
  },
  {
   "n": 14,
@@ -369,7 +382,8 @@
     "reef",
     "sail"
    ]
-  }
+  },
+  "hint": "deep water, reefs, boats and fish"
  },
  {
   "n": 15,
@@ -395,6 +409,7 @@
     "band",
     "wine"
    ]
-  }
+  },
+  "hint": "treats, music, guests and cheers"
  }
 ]
