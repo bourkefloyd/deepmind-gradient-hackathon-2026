@@ -62,8 +62,8 @@ def build_catalog() -> list[SeatSpec]:
                           lambda solver, rng: (RandomSwiperPolicy(rng), HandProfile(hz=10, think=(0.3, 0.8), p_wrong=0.0))))
 
     lambda_ckpt = nano_seat.ckpt_name().startswith("d6_lambda")
-    specs.append(SeatSpec("nano", "Nano 11M · trained on Lambda A100" if lambda_ckpt else "Nano 11M",
-                          "11M params · $0 · ~2 ms" + (" · Lambda A100" if lambda_ckpt else " · CPU-trained fallback"),
+    specs.append(SeatSpec("nano", os.environ.get("WH_NANO_SEAT_NAME") or ("Nano 10M (Lambda)" if lambda_ckpt else "Nano 10M"),
+                          "10M params · $0 · ~2 ms" + (" · trained on Lambda A100" if lambda_ckpt else " · CPU-trained fallback"),
                           lambda solver, rng: (nano_seat.NanoPolicy(rng=rng), NANO_PROFILE),
                           available=nano_seat.available(), default=True))
 
