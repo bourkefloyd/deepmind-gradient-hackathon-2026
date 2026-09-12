@@ -45,7 +45,7 @@ def gc_rooms() -> None:
             del rooms[code]
 
 
-@app.get("/healthz")
+@app.get("/api/health")
 async def healthz():
     s = get_solver()
     return {"ok": True, "words": len(s.words), "rooms": len(rooms)}

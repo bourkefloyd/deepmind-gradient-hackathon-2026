@@ -7,8 +7,15 @@
 # The first deploy of the service takes 100% traffic; later builds are deployed --no-traffic
 # (reachable only via their tag URL) until scripts/promote.sh <tag> moves the demo link.
 #
+# Image build: no Docker daemon and no Cloud Build needed. The app layer (code, word lists,
+# pip-installed deps for linux/x86_64 py3.12) is appended onto python:3.12-slim with `crane`
+# and pushed to Artifact Registry with the deploying account. DEPLOY_MODE=source uses
+# `gcloud run deploy --source` (Cloud Build) instead.
+#
 # Auth: set GCP_SA_KEY_JSON (service-account key as a JSON string) or be logged in already.
 # Single instance, in-memory rooms, WebSockets (request timeout 3600 s), session affinity.
+# Public access: the org policy forbids allUsers IAM bindings, so the service runs with
+# --no-invoker-iam-check. Note: Google's frontend reserves /healthz; health is at /api/health.
 set -euo pipefail
 
 LABEL="${1:-}"
@@ -16,7 +23,11 @@ if [[ -z "$LABEL" ]]; then echo "usage: scripts/deploy.sh <label, e.g. iter2>" >
 TAG="$(echo "$LABEL" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-\n' '-')"
 REGION="${REGION:-us-west1}"
 SERVICE="${SERVICE:-wordhunt}"
+REPO="${REPO:-wordhunt}"
+DEPLOY_MODE="${DEPLOY_MODE:-image}"
+BASE_IMAGE="${BASE_IMAGE:-python:3.12-slim}"
 cd "$(dirname "$0")/.."
+ROOT="$PWD"
 SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 BUILD_LABEL="$TAG · $SHA"
 
@@ -29,9 +40,9 @@ if [[ -n "${GCP_SA_KEY_JSON:-}" ]]; then
   gcloud config set project "$PROJECT" --quiet
 fi
 PROJECT="${PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
-echo "project=$PROJECT region=$REGION service=$SERVICE tag=$TAG build='$BUILD_LABEL'"
+echo "project=$PROJECT region=$REGION service=$SERVICE tag=$TAG build='$BUILD_LABEL' mode=$DEPLOY_MODE"
 
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com --quiet || \
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com --quiet || \
   echo "warn: could not enable services (need serviceusage.serviceUsageAdmin); continuing"
 
 # Env for the revision. '|' delimiter because GEMMA_MODELS is a comma list.
@@ -42,6 +53,48 @@ for v in GEMMA_BASE_URL GEMMA_API_KEY GEMMA_MODELS GEMMA_SEATS NANO_CKPT NANO_TE
   if [[ -n "${!v:-}" ]]; then ENV_VARS="$ENV_VARS|$v=${!v}"; fi
 done
 
+SOURCE_FLAGS=(--source .)
+if [[ "$DEPLOY_MODE" == "image" ]]; then
+  CRANE="${CRANE:-$(command -v crane || true)}"
+  if [[ -z "$CRANE" ]]; then
+    CRANE="/tmp/crane"
+    if [[ ! -x "$CRANE" ]]; then
+      echo "fetching crane"
+      curl -sL https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | tar -xz -C /tmp crane
+      chmod +x "$CRANE"
+    fi
+  fi
+  AR_HOST="$REGION-docker.pkg.dev"
+  IMAGE="$AR_HOST/$PROJECT/$REPO/$SERVICE:$TAG-$SHA"
+  gcloud artifacts repositories describe "$REPO" --location "$REGION" >/dev/null 2>&1 || \
+    gcloud artifacts repositories create "$REPO" --repository-format=docker --location="$REGION" --quiet
+
+  BUILD_DIR="$(mktemp -d)"
+  trap 'rm -rf "$BUILD_DIR" ${KEY_FILE:-}' EXIT
+  mkdir -p "$BUILD_DIR/app/data"
+  cp -r "$ROOT/wordhunt" "$ROOT/static" "$BUILD_DIR/app/"
+  find "$BUILD_DIR/app" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
+  cp "$ROOT"/data/*.json "$BUILD_DIR/app/data/" 2>/dev/null || true
+  # Word lists are not committed (data/README.md).
+  if [[ -f "$ROOT/data/enable1.txt" ]]; then cp "$ROOT/data/enable1.txt" "$BUILD_DIR/app/data/"; else
+    curl -sL -o "$BUILD_DIR/app/data/enable1.txt" https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt; fi
+  if [[ -f "$ROOT/data/common-30k.txt" ]]; then cp "$ROOT/data/common-30k.txt" "$BUILD_DIR/app/data/"; else
+    curl -sL https://raw.githubusercontent.com/arstgit/high-frequency-vocabulary/master/30k.txt | tr -d '\r\t' | awk 'NF' > "$BUILD_DIR/app/data/common-30k.txt"; fi
+  # Deps as manylinux wheels for the base image's interpreter (no compilation here).
+  python3 -m pip install -q --target "$BUILD_DIR/app/site" --platform manylinux2014_x86_64 --python-version 3.12 \
+    --only-binary=:all: --implementation cp -r "$ROOT/requirements.txt"
+  tar -C "$BUILD_DIR" -cf "$BUILD_DIR/layer.tar" app
+  echo "pushing $IMAGE"
+  gcloud auth print-access-token | "$CRANE" auth login "$AR_HOST" -u oauth2accesstoken --password-stdin >/dev/null
+  "$CRANE" append -b "$BASE_IMAGE" -f "$BUILD_DIR/layer.tar" -t "$IMAGE" --platform linux/amd64 >/dev/null
+  "$CRANE" mutate "$IMAGE" -t "$IMAGE" --workdir /app \
+    --env PYTHONPATH=/app/site --env PYTHONUNBUFFERED=1 --env PORT=8080 --exposed-ports 8080 \
+    --entrypoint '' \
+    --cmd python --cmd -m --cmd uvicorn --cmd wordhunt.server:app --cmd --host --cmd 0.0.0.0 --cmd --port --cmd 8080 \
+    --cmd --ws-ping-interval --cmd 20 --cmd --ws-ping-timeout --cmd 20 >/dev/null
+  SOURCE_FLAGS=(--image "$IMAGE")
+fi
+
 TRAFFIC_FLAG=(--no-traffic)
 if ! gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)' >/dev/null 2>&1; then
   echo "first deploy of $SERVICE: this revision takes traffic"
@@ -49,9 +102,9 @@ if ! gcloud run services describe "$SERVICE" --region "$REGION" --format='value(
 fi
 
 gcloud run deploy "$SERVICE" \
-  --source . \
+  "${SOURCE_FLAGS[@]}" \
   --region "$REGION" \
-  --allow-unauthenticated \
+  --allow-unauthenticated --no-invoker-iam-check \
   --tag "$TAG" "${TRAFFIC_FLAG[@]}" \
   --set-env-vars "^|^$ENV_VARS" \
   --min-instances 1 --max-instances 1 \
@@ -66,4 +119,4 @@ TAG_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format=j
 echo
 echo "service (demo link): $SERVICE_URL"
 echo "tag url ($TAG):      $TAG_URL"
-curl -fsS "${TAG_URL:-$SERVICE_URL}/healthz" && echo
+curl -fsS "${TAG_URL:-$SERVICE_URL}/api/health" && echo
