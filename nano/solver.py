@@ -1,7 +1,8 @@
 """Minimal Word Hunt solver: trie DFS over a 4x4 board, 3-8 letter words, 8-way adjacency, no tile reuse.
 
-TODO(consolidate): `wordhunt/solver.py` did not exist on any branch when nano/ was ported (2026-09-12 12:10 PT).
-When the game-server solver lands, make one of them import the other; the trie/DFS here is intentionally plain.
+TODO(consolidate): `wordhunt/solver.py` (game server) landed on main while this was being ported. The nano needs
+every path per word plus trie-node access for the per-prefix DFS in `nano/data.py` (the game one returns the first
+path only), so this copy stays for now; fold one into the other once both are stable.
 
 Board = 16 lowercase letters, row-major (index i -> row i // 4, col i % 4).
 """

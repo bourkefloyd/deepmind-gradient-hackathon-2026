@@ -1,10 +1,7 @@
 data/enable1.txt
 data/common-30k.txt
-<<<<<<< HEAD
-=======
 runs/
 data/*.npz
 .venv/
->>>>>>> f62b9a0 (Nano: port nanoagent MVP for Word Hunt)
 __pycache__/
 *.pyc
