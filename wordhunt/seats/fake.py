@@ -71,8 +71,8 @@ FAKE_SEATS = [
     {
         "seat_id": "ai:reflex-b",
         "name": "Reflex-B",
-        "policy": lambda rank, rng: ReflexPolicy(rank, rng, length_bias=-0.1, rare_penalty=0.02, temperature=1.2),
-        "profile": HandProfile(hz=7, lag=(0.25, 0.4), think=_pair("WH_REFLEX_B_THINK", "8,13"),
+        "policy": lambda rank, rng: ReflexPolicy(rank, rng, length_bias=-0.4, rare_penalty=0.02, temperature=1.2),
+        "profile": HandProfile(hz=7, lag=(0.25, 0.4), think=_pair("WH_REFLEX_B_THINK", "10,15"),
                                p_wrong=_f("WH_REFLEX_WRONG", 0.1) + 0.04, p_hesitate=_f("WH_REFLEX_HESITATE", 0.15)),
     },
 ]
