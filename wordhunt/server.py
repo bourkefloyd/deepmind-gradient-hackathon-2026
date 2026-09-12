@@ -45,10 +45,18 @@ def gc_rooms() -> None:
             del rooms[code]
 
 
+BUILD = os.environ.get("WH_BUILD", "dev")
+
+
 @app.get("/api/health")
 async def healthz():
     s = get_solver()
-    return {"ok": True, "words": len(s.words), "rooms": len(rooms)}
+    return {"ok": True, "words": len(s.words), "rooms": len(rooms), "build": BUILD}
+
+
+@app.get("/api/build")
+async def build_info():
+    return {"build": BUILD}
 
 
 @app.get("/")
