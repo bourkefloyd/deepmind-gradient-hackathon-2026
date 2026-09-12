@@ -36,9 +36,13 @@ Management MCP is attached to Cloud Agents as namespace `nango`. Slack is create
 | Item | Value |
 | --- | --- |
 | Slack integration id | `slack` |
-| Deployed actions | `send-message@3.0.1`, `list-channels` |
-| Connect end_user id | `wordhunt-buzzer` |
-| Discord | needs your own OAuth client id/secret |
+| Slack connection id | `82f94a5c-4116-41b3-8afe-8aeed24f714b` |
+| Slack test channel | `#new-channel` (`C0BUKC1AU06`) |
+| Slack test | `send-message` ok, ts `1789242579.587919` |
+| Discord guild | Open Model Hack - Gradient x Google Deepmind (`1547705063609470976`) |
+| Discord invite | https://discord.gg/db3aDstTX (lands in `#general`) |
+| Discord channel wanted | `wordhunt` (admin must create; you are not an admin) |
+| Discord Nango | no shared OAuth app. Need `DISCORD_WEBHOOK_URL` (preferred) or `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET` + bot invite |
 
 After the user authorizes Slack, `connections_list` with `end_user_id=wordhunt-buzzer` (or tag `purpose=wordhunt-buzzer`), then `actions_trigger` `list-channels` and a test `send-message`.
 

@@ -1,0 +1,17 @@
+{
+  "guild_id": "1547705063609470976",
+  "guild_name": "Open Model Hack - Gradient x Google Deepmind",
+  "invite_url": "https://discord.gg/db3aDstTX",
+  "invite_lands_in": {
+    "channel_id": "1547705064099942432",
+    "name": "general"
+  },
+  "requested_channel_name": "wordhunt",
+  "nango": {
+    "provider": "discord",
+    "shared_oauth": false,
+    "webhook_integration_id": "discord-wordhunt",
+    "bot_integration_id": "discord"
+  },
+  "notes": "You are not a guild admin. Admin must create #wordhunt and either give a channel webhook URL or invite a bot. Gemma should still function-call Nango; do not post from the Word Hunt server."
+}
