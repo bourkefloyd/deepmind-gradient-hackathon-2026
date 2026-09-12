@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 
 from ..hand import HandProfile
@@ -46,18 +47,32 @@ class ReflexPolicy(WordQueuePolicy):
         return None
 
 
+def _pair(env: str, default: str) -> tuple[float, float]:
+    v = [float(x) for x in os.environ.get(env, default).split(",")]
+    return (v[0], v[-1])
+
+
+def _f(env: str, default: float) -> float:
+    return float(os.environ.get(env, default))
+
+
 # Two fake seats with different tempos. Names are honest: these are heuristics, not the nano.
+# Pace is env-tunable without a rebuild (seconds between words, hesitation/wrong-tap rates):
+#   WH_REFLEX_A_THINK="5,9"  WH_REFLEX_B_THINK="7,12"  WH_REFLEX_HESITATE=0.15  WH_REFLEX_WRONG=0.1
+# Defaults land each bot around 2-3k on rich boards so a casual human can beat them.
 FAKE_SEATS = [
     {
         "seat_id": "ai:reflex-a",
         "name": "Reflex-A",
         "policy": lambda rank, rng: ReflexPolicy(rank, rng, length_bias=-0.7, temperature=1.0),
-        "profile": HandProfile(hz=10, lag=(0.15, 0.25), think=(3.0, 6.0), p_wrong=0.06, p_hesitate=0.04),
+        "profile": HandProfile(hz=8, lag=(0.2, 0.35), think=_pair("WH_REFLEX_A_THINK", "5,9"),
+                               p_wrong=_f("WH_REFLEX_WRONG", 0.1), p_hesitate=_f("WH_REFLEX_HESITATE", 0.15)),
     },
     {
         "seat_id": "ai:reflex-b",
         "name": "Reflex-B",
-        "policy": lambda rank, rng: ReflexPolicy(rank, rng, length_bias=0.4, rare_penalty=0.03, temperature=1.2),
-        "profile": HandProfile(hz=8, lag=(0.2, 0.3), think=(5.0, 9.0), p_wrong=0.12, p_hesitate=0.08),
+        "policy": lambda rank, rng: ReflexPolicy(rank, rng, length_bias=-0.1, rare_penalty=0.02, temperature=1.2),
+        "profile": HandProfile(hz=7, lag=(0.25, 0.4), think=_pair("WH_REFLEX_B_THINK", "8,13"),
+                               p_wrong=_f("WH_REFLEX_WRONG", 0.1) + 0.04, p_hesitate=_f("WH_REFLEX_HESITATE", 0.15)),
     },
 ]

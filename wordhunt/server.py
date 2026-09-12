@@ -52,7 +52,9 @@ BUILD = os.environ.get("WH_BUILD", "dev")
 async def healthz():
     s = get_solver()
     now = time.time()
-    return {"ok": True, "words": len(s.words), "build": BUILD, "rooms": len(rooms),
+    from .seats import registry
+    return {"ok": True, "words": len(s.words), "build": BUILD, "rooms": len(rooms), "tuning": registry.tuning(),
+            "lineup": [x.id for x in registry.lineup()],
             "room_list": [{"code": r.code, "state": r.state, "round": r.round_no, "humans": r.humans_connected,
                            "seats": len(r.seats), "age_s": int(now - r.created_at)} for r in rooms.values()]}
 

@@ -30,8 +30,16 @@ class SeatSpec:
 GEMMA_PROFILE = HandProfile(hz=10, lag=(0.15, 0.3), think=(0.6, 1.4), p_wrong=0.05, p_hesitate=0.04)
 # The nano hesitates and backs out on its own (abort actions), so the hand adds no wrong taps.
 # Between-word think time bounds its pace (PLAN: "speed is bounded"); WH_NANO_THINK="1.0,2.2" overrides.
-_think = tuple(float(x) for x in os.environ.get("WH_NANO_THINK", "1.5,3.0").split(","))
-NANO_PROFILE = HandProfile(hz=10, lag=(0.15, 0.3), think=(_think[0], _think[-1]), p_wrong=0.0, p_hesitate=0.03)
+_think = tuple(float(x) for x in os.environ.get("WH_NANO_THINK", "3,5").split(","))
+NANO_PROFILE = HandProfile(hz=float(os.environ.get("WH_NANO_HZ", 10)), lag=(0.15, 0.3), think=(_think[0], _think[-1]),
+                           p_wrong=0.0, p_hesitate=float(os.environ.get("WH_NANO_HESITATE", 0.05)))
+
+
+def tuning() -> dict:
+    """Live pace knobs, surfaced in /api/health so the deployed dial is visible."""
+    keys = ("WH_SEATS", "WH_NANO_THINK", "WH_NANO_TEMPERATURE", "WH_NANO_HESITATE", "WH_NANO_HZ",
+            "WH_REFLEX_A_THINK", "WH_REFLEX_B_THINK", "WH_REFLEX_HESITATE", "WH_REFLEX_WRONG")
+    return {k: os.environ.get(k, "(default)") for k in keys}
 
 
 def default_lineup() -> list[str]:
