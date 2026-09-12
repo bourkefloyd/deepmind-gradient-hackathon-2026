@@ -161,9 +161,9 @@ def main(argv: list[str] | None = None) -> int:
         import matplotlib.pyplot as plt
 
         names = [r["seat"].replace("**", "").split(" (")[0] for r in rows]
+        fig_h = 3.6 + 0.35 * max(0, len(rows) - 5)
         fig, ax = plt.subplots(1, 2, figsize=(10, fig_h))
         colors = ["#999999"] + ["#1f77b4"] * (len(rows) - 3) + ["#ff7f0e", "#ff7f0e"]
-        fig_h = 3.6 + 0.35 * max(0, len(rows) - 5)
         ax[0].barh(names, [r["score"] for r in rows], color=colors)
         ax[0].set_title("score / board (20 boards, 75 s)")
         ax[0].invert_yaxis()
