@@ -24,8 +24,11 @@ curl -sL -o data/enable1.txt https://raw.githubusercontent.com/dolph/dictionary/
 .venv/bin/python -m gemma_seat.boards 3                 # solver smoke test
 .venv/bin/python -m gemma_seat.client 3                 # one board, both modalities
 .venv/bin/python -m gemma_seat.eval --n 20 --seed 0 --json out.json
+.venv/bin/python -m gemma_seat.eval --n 20 --seed 0 --modality text --thinking --max-tokens 2048 --json think.json
+.venv/bin/python -m gemma_seat.eval --merge a.json b.json        # one table across runs
 .venv/bin/python -m gemma_seat.bot --dry-run --seed 3   # hand timeline, no server
 .venv/bin/python -m gemma_seat.bot --room ABCD --server ws://localhost:8000 --modality text
+.venv/bin/python -m gemma_seat.bot --create-room --start --rounds 1   # make a room, host it, play one race
 ```
 
 ## Eval, n=20 boards, seed 0 (`results/eval_n20_seed0.md`)
@@ -47,6 +50,29 @@ Reading: the 12B knows words but cannot trace adjacency; ~80% of its output is
 real English that is not on the board. The screenshot seat reads the tiles fine
 (vision intact) and lands in the same place as the text seat. Thinking off,
 ~2 s per call, so a 75 s race gets several re-asks.
+
+### Prompt x thinking A/B, same 20 boards (`results/eval_n20_seed0_ab.md`)
+
+| | text (default) | image | text + thinking on | index (tile-path prompt) |
+|---|---:|---:|---:|---:|
+| valid words / call | 5.1 | 4.4 | 0.0 | 0.1 |
+| mean score / board | 1780 | 1200 | 0 | 25 |
+| latency mean / p95 | 2.1s / 5.4s max | 2.2s / 10.3s max | 30.0s / 30.0s | 15.5s / 21.4s |
+| timeouts (30 s cap) | 0 | 0 | 20/20 | 0 |
+
+- Thinking on (`enable_thinking=true`, max_tokens 2048): 20/20 calls hit the 30 s
+  cap with zero output; uncapped it was still enumerating tiles at 180 s. Not a
+  race seat, and not an exhibition seat either: the 75 s clock ends before the
+  first word. Thinking-on is a 31B story (ActionFleet record 0029/0031), not 12B.
+- Tile-index paths, validated client-side: the 12B reasons in-band instead of
+  listing, almost nothing parses as a legal path. Kept as `--modality index`
+  for reference; default stays `text`.
+
+## Live race (local `wordhunt` server, room QDH9, 75 s)
+
+`python -m gemma_seat.bot --create-room --start --rounds 1`: 15 words swiped,
+15/15 judged ok on the ticker, seat total 7400 vs Reflex-A 3400 / Reflex-B 5900.
+Text modality, thinking off, one call up front (~2 s) then re-asks.
 
 ## Bot
 

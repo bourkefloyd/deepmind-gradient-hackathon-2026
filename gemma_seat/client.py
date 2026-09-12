@@ -57,7 +57,76 @@ IMAGE_USER_PROMPT = (
     "and no-reuse rules. Aim for up to {max_words} words. Words only, one per line."
 )
 
+INDEX_SYSTEM_PROMPT = (
+    "You are playing Word Hunt, a 4x4 letter-grid word game. The 16 tiles are numbered "
+    "0-15, row by row: tiles 0-3 are the top row, 4-7 the second, 8-11 the third, 12-15 "
+    "the bottom row.\n"
+    "Rules: a word is spelled by a path of tiles where each tile is adjacent to the previous "
+    "one (horizontal, vertical or diagonal neighbour; the neighbour table is given), and no "
+    "tile is used twice in one word. Words must have at least 3 letters and be ordinary "
+    "English dictionary words. Longer words score far more: 3 letters=100, 4=400, 5=800, "
+    "6=1400, 7+=1800.\n"
+    "Answer with one word per line in exactly this format: WORD: t1-t2-t3 where t1, t2... "
+    "are the tile numbers in order, one per letter. Longest first, each word once, stop when "
+    "done. Output ONLY these lines: no reasoning, no comments, no parentheses, no corrections. "
+    "If unsure about a word, leave it out."
+)
+
+INDEX_USER_PROMPT = (
+    "Grid (tile number:letter), rows top to bottom:\n{grid}\n\n"
+    "Neighbour table (tile: its adjacent tiles):\n{adjacency}\n\n"
+    "List every valid word with its tile path, up to {max_words} words. "
+    "Format: WORD: t1-t2-t3"
+)
+
 _WORD_RE = re.compile(r"[A-Za-z]{3,}")
+_PATH_LINE_RE = re.compile(r"([A-Za-z]{3,})\s*[:=\-]+\s*([\d][\d\s,\-–>→]*)")
+
+
+def indexed_grid_text(board: str) -> str:
+    rows = grid_rows(board.upper())
+    return "\n".join(
+        "  ".join(f"{r * 4 + c:2d}:{ch}" for c, ch in enumerate(row)) for r, row in enumerate(rows)
+    )
+
+
+def adjacency_text() -> str:
+    from .boards import NEIGHBORS
+
+    return "\n".join(f"{i}: {', '.join(str(n) for n in NEIGHBORS[i])}" for i in range(16))
+
+
+def parse_path_lines(text: str, board: str) -> tuple[list[str], list[str]]:
+    """(legal words, all candidate words) from 'WORD: 0-1-5' lines.
+
+    A word is kept only if its path is legal on `board`: one tile per letter,
+    no repeats, consecutive tiles adjacent, and the tiles spell the word.
+    """
+    from .boards import NEIGHBORS
+
+    board = board.lower()
+    text = re.sub(r"<(think|thought)>.*?</\1>", " ", text, flags=re.S | re.I)
+    out: list[str] = []
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for line in text.splitlines():
+        m = _PATH_LINE_RE.search(line.strip().lstrip("-*•").strip())
+        if not m:
+            continue
+        word = m.group(1).lower()
+        tiles = [int(x) for x in re.findall(r"\d+", m.group(2))]
+        candidates.append(word)
+        if word in seen or len(tiles) != len(word) or len(set(tiles)) != len(tiles):
+            continue
+        if any(not (0 <= t < 16) for t in tiles):
+            continue
+        if "".join(board[t] for t in tiles) != word:
+            continue
+        if any(b not in NEIGHBORS[a] for a, b in zip(tiles, tiles[1:])):
+            continue
+        seen.add(word)
+        out.append(word)
+    return out, candidates
 
 
 @dataclass
@@ -68,6 +137,7 @@ class CallResult:
     raw: str = ""
     error: str | None = None
     usage: dict = field(default_factory=dict)
+    candidates: int = 0  # words the model emitted before any client-side path filter
 
     @property
     def ok(self) -> bool:
@@ -151,6 +221,7 @@ class GemmaSeatClient:
         temperature: float = 0.2,
         max_words: int = 40,
         image_px: int = DEFAULT_IMAGE_PX,
+        thinking: bool = False,
     ):
         from openai import OpenAI
 
@@ -160,6 +231,7 @@ class GemmaSeatClient:
         self.temperature = temperature
         self.max_words = max_words
         self.image_px = image_px
+        self.thinking = thinking
         self._client = OpenAI(
             base_url=base_url,
             api_key=os.getenv("MLXVLM_API_KEY") or "mlx-vlm",
@@ -175,9 +247,18 @@ class GemmaSeatClient:
                 + ", ".join(w.upper() for w in exclude[-60:])
                 + ". Find different words, including shorter ones."
             )
+        system = SYSTEM_PROMPT
         if modality == "text":
             user_content: object = (
                 TEXT_USER_PROMPT.format(grid=grid_text(board), max_words=self.max_words) + tail
+            )
+        elif modality == "index":
+            system = INDEX_SYSTEM_PROMPT
+            user_content = (
+                INDEX_USER_PROMPT.format(
+                    grid=indexed_grid_text(board), adjacency=adjacency_text(), max_words=self.max_words
+                )
+                + tail
             )
         elif modality == "image":
             b64 = base64.b64encode(render_board_png(board, self.image_px)).decode()
@@ -188,23 +269,25 @@ class GemmaSeatClient:
         else:
             raise ValueError(f"unknown modality {modality!r}")
         return [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system},
             {"role": "user", "content": user_content},
         ]
 
     def _request_kwargs(self, board: str, modality: str, exclude: list[str] | None = None) -> dict:
-        return {
+        kwargs = {
             "model": self.model,
             "messages": self._messages(board, modality, exclude),
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
-            "reasoning_effort": "none",
             # Gemma 4 at low temperature falls into WORD\nWORD\nWORD loops (the
             # 'repetition loops' failure of nanoagent record 0025); the penalties
             # break the loop, and the stream reader below cuts it off if not.
             "presence_penalty": 0.8,
-            "extra_body": {"enable_thinking": False, "repetition_penalty": 1.15},
+            "extra_body": {"enable_thinking": self.thinking, "repetition_penalty": 1.15},
         }
+        if not self.thinking:
+            kwargs["reasoning_effort"] = "none"
+        return kwargs
 
     def words(self, board: str, modality: str = "text") -> CallResult:
         """One blocking call; never raises (errors land in CallResult.error).
@@ -213,9 +296,12 @@ class GemmaSeatClient:
         duplicate lines instead of burning the whole token budget.
         """
         t0 = time.perf_counter()
-        state: dict = {"raw": "", "error": None}
+        state: dict = {"raw": "", "error": None, "candidates": 0}
         words = list(self._stream(board, modality, state=state))
-        return CallResult(modality, words, time.perf_counter() - t0, state["raw"], state["error"])
+        return CallResult(
+            modality, words, time.perf_counter() - t0, state["raw"], state["error"],
+            candidates=state["candidates"],
+        )
 
     def stream_words(
         self,
@@ -247,20 +333,31 @@ class GemmaSeatClient:
     ) -> Iterator[str]:
         deadline = time.perf_counter() + (deadline_s if deadline_s is not None else self.timeout_s)
         seen: set[str] = set()
+        seen_candidates: set[str] = set()
         buf = ""
         raw = ""
         dup_run = 0
+        candidates = 0
 
         def take(line: str) -> Iterator[str]:
-            nonlocal dup_run
-            toks = parse_words(line)
-            if not toks:
+            nonlocal dup_run, candidates
+            if modality == "index":
+                toks, cands = parse_path_lines(line, board)
+            else:
+                toks = parse_words(line)
+                cands = toks
+            if not cands:
                 return
-            new = [w for w in toks if w not in seen]
-            dup_run = 0 if new else dup_run + 1
-            for w in new:
-                seen.add(w)
-                yield w
+            candidates += len(cands)
+            # Loop detection counts repeated *candidates*, so a run of illegal
+            # paths does not end the stream early.
+            fresh = [w for w in cands if w not in seen_candidates]
+            seen_candidates.update(cands)
+            dup_run = 0 if fresh else dup_run + 1
+            for w in toks:
+                if w not in seen:
+                    seen.add(w)
+                    yield w
 
         try:
             stream = self._client.chat.completions.create(
@@ -285,6 +382,7 @@ class GemmaSeatClient:
             yield from take(buf)
         if state is not None:
             state["raw"] = raw
+            state["candidates"] = candidates
 
 
 if __name__ == "__main__":

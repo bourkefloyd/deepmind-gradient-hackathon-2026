@@ -272,16 +272,25 @@ class GemmaSeat:
 # --------------------------------------------------------------------------------------
 # Bot: WebSocket glue
 # --------------------------------------------------------------------------------------
+def _client(args: argparse.Namespace):
+    from .client import GemmaSeatClient
+
+    return GemmaSeatClient(
+        base_url=args.base_url,
+        model=args.model,
+        timeout_s=args.timeout,
+        max_words=args.max_words,
+        max_tokens=args.max_tokens,
+        thinking=args.thinking,
+    )
+
+
 async def run_bot(args: argparse.Namespace) -> None:
     import websockets
 
-    from .client import GemmaSeatClient
-
     adapter = ADAPTERS[args.protocol]()
     rng = random.Random(args.seed)
-    client = GemmaSeatClient(
-        base_url=args.base_url, model=args.model, timeout_s=args.timeout, max_words=args.max_words
-    )
+    client = _client(args)
     url = adapter.ws_url(args.server, args.room)
     player_id = args.player_id or f"gemma12b-{uuid.uuid4().hex[:6]}"
     log.info("connecting %s as %s (%s modality)", url, args.name, args.modality)
@@ -389,7 +398,7 @@ async def run_dry(args: argparse.Namespace) -> None:
             print(f"{time.monotonic() - t0:6.2f}s  {word.upper():<10} {'+' + str(score_word(word)) if ok else why}")
 
     hand = Hand(HandConfig(), rng, hand_send)
-    client = GemmaSeatClient(base_url=args.base_url, model=args.model, timeout_s=args.timeout, max_words=args.max_words)
+    client = _client(args)
     seat = GemmaSeat(client, args.modality, hand, rng)
     await seat.play_round(board, time.monotonic() + args.race_s)
     valid = [w for w in seat.submitted if validate(board, w, d)[0]]
@@ -408,7 +417,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--protocol", choices=sorted(ADAPTERS), default="v1")
     p.add_argument("--name", default="Gemma 12B")
     p.add_argument("--player-id", default=None)
-    p.add_argument("--modality", choices=["text", "image"], default="text")
+    p.add_argument("--modality", choices=["text", "image", "index"], default="text")
+    p.add_argument("--thinking", action="store_true", help="exhibition variant: enable_thinking=true")
+    p.add_argument("--max-tokens", type=int, default=400)
     p.add_argument("--base-url", default=DEFAULT_BASE_URL)
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--timeout", type=float, default=60.0, help="hard cap per model call")
