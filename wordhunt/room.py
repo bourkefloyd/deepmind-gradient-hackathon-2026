@@ -122,7 +122,8 @@ class Room:
 
     def add_from_catalog(self, spec_id: str) -> Seat | None:
         spec = registry.find(spec_id)
-        if spec is None or not spec.available or len(self.seats) >= 8:
+        n_ai = sum(1 for s in self.seats.values() if s.kind == "ai")
+        if spec is None or not spec.available or n_ai >= 6:
             return None
         n = sum(1 for s in self.seats.values() if s.spec_id == spec_id)
         seat_id = f"ai:{spec_id}" + (f"-{n + 1}" if n else "")

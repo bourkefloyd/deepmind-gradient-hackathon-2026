@@ -108,7 +108,7 @@ State names in the code are `lobby | countdown | playing | results` (`Room.state
 ### Joining and the hot-join window
 
 - Joining in `lobby`, `countdown` or `results` seats you now.
-- Joining mid-race: `add_human` sets `seat.queued = self._late_for_this_round()`, which is meant to allow play if fewer than 15 s of the race have elapsed, else queue the player for the next round (the client shows a banner and disables submit). **As committed, the constant `HOTJOIN_S` is referenced but never defined** in `wordhunt/room.py`, so a mid-race join raises `NameError` inside the socket handler; the exception is swallowed and the socket dropped, and the client reconnects every 1.2 s. See [Known gaps](#7-known-gaps-and-discrepancies). AI seats added mid-race are queued (`seat.queued = state == "playing"`) and skipped by the tick loop.
+- Joining mid-race: `add_human` sets `seat.queued = self._late_for_this_round()`: play if fewer than `HOTJOIN_S` (env `WH_HOTJOIN_S`, default 15 s) of the race have elapsed, else queue the player for the next round (the client shows a banner and disables submit). (`HOTJOIN_S` was undefined between `383d976` and `6b1900d`; see [Known gaps](#7-known-gaps-and-discrepancies).) AI seats added mid-race are queued (`seat.queued = state == "playing"`) and skipped by the tick loop.
 - Caps: `WH_MAX_HUMANS` (default 24) humans per room; `add_from_catalog` refuses when the room already has 8 seats of any kind.
 
 ### Boards
@@ -418,13 +418,13 @@ Three solver implementations exist on purpose for now (`wordhunt/solver.py` retu
 
 Things the code does that the plan or the README do not say, or that look unfinished. Flagged, not fixed, in this doc.
 
-1. **`HOTJOIN_S` is undefined** (`wordhunt/room.py`, `_late_for_this_round`). Commit `383d976` added the 15 s hot-join window but never defined the constant. A human joining while `state == "playing"` triggers `NameError`, which `server.py` swallows; the joiner's socket is dropped and the client reconnect-loops until the round ends. One-line fix: `HOTJOIN_S = float(os.environ.get("WH_HOTJOIN_S", 15.0))` next to `RACE_S`.
-2. **Nano is not in the deployed image**: `Dockerfile` and `scripts/deploy.sh` do not copy `nano/`, and `requirements.txt` has no `torch`/`numpy`. The seat is hidden until that changes (`nano/README.md` step 1). Memory on the 512 MiB revision with CPU torch loaded is unmeasured.
-3. **`deploy.sh` image mode does not copy `integrations/`** (the `Dockerfile` does) and forwards none of `WH_INTEGRATIONS`, `WH_PUBLIC_URL`, `NANGO_*`; the secret mount is outside the script. Whether the live revision posts to Discord depends on manual `gcloud run services update` steps.
-4. **Nano adapter ignores `found`**: `wordhunt/seats/nano.py` wraps `StudentPolicy.act(board, path)`; the duplicate-suppression in `nano/seat.py` (`NanoSeat.next_action`) is not used by the game, so the nano can re-submit a word it already has (judged `dup`, costs a think pause).
+1. ~~**`HOTJOIN_S` is undefined**~~ Fixed on main (`6b1900d`): `HOTJOIN_S = float(os.environ.get("WH_HOTJOIN_S", 15.0))`. The live `iter3` build (`db06e46`) predates the fix; `iter3b` ships it. Mid-race join is now part of the Cloud Run check (`/tmp`-style script: join at 3 s → seated, join at 20 s → queued, socket kept).
+2. ~~**Nano is not in the deployed image**~~ Since iter3: `Dockerfile` copies `nano/`, `requirements.txt` pulls CPU-only `torch`/`numpy` from the PyTorch CPU index, `deploy.sh` image mode ships `nano/` + manylinux_2_28 wheels, revision memory is 1 GiB. `Nano 10M` is the default lineup (`WH_SEATS` overrides); measured 19 ms/action on the 1 vCPU revision.
+3. ~~**`deploy.sh` image mode does not copy `integrations/`**~~ Since iter3: the script copies `integrations/` when present, forwards `WH_INTEGRATIONS`, `WH_PUBLIC_URL`, `NANGO_*`, `DISCORD_CHANNEL_ID`, and mounts `nango-secret-key` as `NANGO_SECRET_KEY` by default when the secret is readable (warns and skips otherwise; `WH_INTEGRATIONS=0` disables). The revision runs as the deploying SA so the secret is accessible.
+4. ~~**Nano adapter ignores `found`**~~ Since iter3: `wordhunt/seats/nano.py` wraps `NanoSeat.next_action(board, path, found)` and forwards `on_result`; the hand normalizes judged words to lowercase so the suppression matches (0 dups in a 6-board simulation, was 6 per round).
 5. **Scoring differs for 8-letter words**: the game pays 1,800 flat for 7+; `nano/solver.py` and `gemma_seat/boards.py` pay 1,800 + 400 per extra letter. Eval scores and room scores are not byte-identical for 8-letter words.
 6. **`GEMMA_BASE_URL` means two things**: a server-side registry seat endpoint in `wordhunt/seats/gemma.py` and the Mac-side commentator endpoint in `integrations/commentator.py`.
-7. **Seat cap counts humans**: `add_from_catalog` refuses once `len(room.seats) >= 8`, so with 8+ humans no AI seat can be added.
+7. ~~**Seat cap counts humans**~~ Fixed: `add_from_catalog` now caps AI seats at 6 regardless of human count.
 8. **Live learner and escalation are not wired** (§3). `EscalatingPolicy` has no teacher; the registry only builds `StudentPolicy`.
 9. **Gemma bot is a human seat server-side**: no `label`, counts toward `WH_MAX_HUMANS`, and its words are masked like any player's. The Discord `round_ended` post therefore shows it with the human icon.
 10. **PLAN.md says "no hot-join"**; the code implements a 15 s window (once item 1 is fixed). PLAN.md's default was tap-to-build; the client supports both tap and swipe.
