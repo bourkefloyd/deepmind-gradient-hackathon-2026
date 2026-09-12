@@ -12,6 +12,7 @@ from typing import Any, Callable, Awaitable
 from .board import generate_board, load_packed_boards
 from .hand import Hand, HandProfile
 from .levels import Level, get_levels, level_for_round
+from .persist import RACE_SAVE_EVERY_S, store as room_store
 from .scoring import score_word
 from .seats import registry
 from .seats.base import Policy
@@ -72,7 +73,7 @@ def new_code(rng: random.Random) -> str:
 
 
 def _emit(event: str, room: "Room") -> None:  # fire-and-forget to integrations/ (Discord via Nango); never raises
-    if not INTEGRATIONS:
+    if not INTEGRATIONS or getattr(room, "quiet", False):
         return
     try:
         from integrations.events import emit
@@ -83,8 +84,9 @@ def _emit(event: str, room: "Room") -> None:  # fire-and-forget to integrations/
 
 
 class Room:
-    def __init__(self, code: str, solver: Solver, rng: random.Random | None = None):
+    def __init__(self, code: str, solver: Solver, rng: random.Random | None = None, seat_defaults: bool = True, quiet: bool = False):
         self.code = code
+        self.quiet = quiet              # no Discord/Nango posts for this room (worker test rooms)
         self.solver = solver
         self.rng = rng or random.Random()
         self.seats: dict[str, Seat] = {}
@@ -105,9 +107,62 @@ class Room:
         self.perf = {"broadcast_ms_max": 0.0, "broadcast_ms_last": 0.0, "tick_late_ms_max": 0.0}
         self._boards = load_packed_boards()
         self.rng.shuffle(self._boards)
-        for spec in registry.lineup():
-            self.add_from_catalog(spec.id)
-        _emit("room_created", self)
+        self.restored = False           # rehydrated from the room store after a deploy/restart
+        if seat_defaults:
+            for spec in registry.lineup():
+                self.add_from_catalog(spec.id)
+            _emit("room_created", self)
+
+    # ---- persistence -----------------------------------------------------------------------
+    def to_doc(self) -> dict:
+        """Durable state only (no sockets, hands, or solver output)."""
+        return {
+            "v": 1, "code": self.code, "host_id": self.host_id, "state": self.state, "round_no": self.round_no,
+            "board": self.board, "created_at": self.created_at, "saved_at": self.now(), "results": self.results,
+            "level_idx": getattr(self, "level_idx", None), "recreated": self.recreated, "quiet": self.quiet,
+            "seats": [{"seat_id": x.seat_id, "name": x.name, "kind": x.kind, "color": x.color, "label": x.label,
+                       "spec_id": x.spec_id, "queued": x.queued, "found": x.found} for x in self.seats.values()],
+        }
+
+    @classmethod
+    def from_doc(cls, doc: dict, solver: Solver) -> "Room":
+        """Rehydrate. lobby/results restore fully; a room saved mid-race (countdown/playing) comes back
+        as a fresh lobby with the same seats, since the race itself cannot be resumed."""
+        room = cls(doc["code"], solver, seat_defaults=False, quiet=bool(doc.get("quiet", False)))
+        room.created_at = doc.get("created_at", room.created_at)
+        room.host_id = doc.get("host_id")
+        room.round_no = int(doc.get("round_no", 0))
+        room.recreated = bool(doc.get("recreated", False))
+        room.restored = True
+        if doc.get("level_idx") is not None:
+            room.level_idx = doc["level_idx"]
+        mid_race = doc.get("state") in ("countdown", "playing")
+        for sd in doc.get("seats", []):
+            if sd["kind"] == "ai":
+                seat = room.add_from_catalog(sd.get("spec_id") or sd["seat_id"].split(":", 1)[-1])
+                if seat is None:
+                    continue
+                seat.name = sd.get("name", seat.name)
+            else:
+                seat = Seat(sd["seat_id"], sd["name"], "human", sd.get("color") or room._color())
+                room.seats[seat.seat_id] = seat
+            seat.color = sd.get("color", seat.color)
+            seat.found = {} if mid_race else {k: int(v) for k, v in (sd.get("found") or {}).items()}
+        if doc.get("state") == "results" and not mid_race:
+            room.state = "results"
+            room.board = doc.get("board", "")
+            room.results = doc.get("results") or []
+            room.level = level_for_round(get_levels(), room.round_no)
+            if room.board:
+                room.words = solver.solve(room.board)
+        else:
+            room.state = "lobby"
+            if mid_race and room.round_no > 0:
+                room.round_no -= 1     # the interrupted round did not happen
+        return room
+
+    def persist(self) -> None:
+        room_store().save(self.code, self.to_doc())
 
     # ---- seats -------------------------------------------------------------------------------
     def _color(self) -> str:
@@ -220,6 +275,8 @@ class Room:
             "catalog": [c.public() for c in registry.catalog()],
             "spectators": len(self.spectators),
             "recreated": self.recreated,
+            "restored": self.restored,
+            "quiet": self.quiet,
         }
 
     async def broadcast(self, msg: dict) -> None:
@@ -239,6 +296,7 @@ class Room:
             self.drop_socket(ws)
 
     async def send_state(self) -> None:
+        self.persist()
         snap = self.snapshot()
         if self.state == "results":
             await self.broadcast(snap)
@@ -316,9 +374,13 @@ class Room:
         _emit("round_started", self)
 
         period = 0.05
+        last_save = self.now()
         while self.now() < self.phase_ends_at:
             t0 = time.perf_counter()
             await self._tick_ais()
+            if self.now() - last_save >= RACE_SAVE_EVERY_S:
+                last_save = self.now()
+                self.persist()
             await asyncio.sleep(period)
             late = (time.perf_counter() - t0 - period) * 1000
             if late > self.perf["tick_late_ms_max"]:

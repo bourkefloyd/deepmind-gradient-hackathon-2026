@@ -1,15 +1,17 @@
 """FastAPI app: static page, room API, WebSocket room. Single process, in-memory rooms."""
 from __future__ import annotations
 
+import asyncio
 import os
 import random
 import re
 import time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .persist import store as room_store
 from .room import Room, new_code
 from .solver import get_solver
 
@@ -23,6 +25,8 @@ app = FastAPI(title="Word Hunt VS")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 rooms: dict[str, Room] = {}
+STARTED_AT = time.time()
+INSTANCE_ID = os.environ.get("K_REVISION", "local") + "/" + "".join(random.choice("0123456789abcdef") for _ in range(6))
 players: dict[str, str] = {}          # player_id -> display name (passkey can attach here later)
 _rng = random.Random()
 
@@ -44,9 +48,27 @@ def gc_rooms() -> None:
         if r.humans_connected == 0 and now - r.created_at > ROOM_TTL_S:
             r._cancel_task()
             del rooms[code]
+            try:
+                asyncio.get_running_loop().create_task(room_store().delete(code))
+            except RuntimeError:
+                pass
 
 
 BUILD = os.environ.get("WH_BUILD", "dev")
+
+
+@app.on_event("startup")
+async def rehydrate_rooms() -> None:
+    """Bring back rooms saved by the previous process/revision (deploys wipe memory)."""
+    docs = await room_store().load_all()
+    solver = get_solver()
+    for d in docs:
+        try:
+            rooms[d["code"]] = Room.from_doc(d, solver)
+        except Exception as e:
+            __import__("logging").getLogger("wordhunt.server").warning("rehydrate %s failed: %s", d.get("code"), e)
+    if docs:
+        __import__("logging").getLogger("wordhunt.server").info("rehydrated %d rooms from %s", len(rooms), room_store().url)
 
 
 @app.get("/api/health")
@@ -55,6 +77,8 @@ async def healthz():
     now = time.time()
     from .seats import registry
     return {"ok": True, "words": len(s.words), "build": BUILD, "rooms": len(rooms), "tuning": registry.tuning(),
+            "uptime_s": int(now - STARTED_AT), "instance_id": INSTANCE_ID,
+            "store": {"url": room_store().url, **room_store().stats},
             "lineup": [x.id for x in registry.lineup()],
             "room_list": [{"code": r.code, "state": r.state, "round": r.round_no, "humans": r.humans_connected,
                            "seats": len(r.seats), "age_s": int(now - r.created_at)} for r in rooms.values()]}
@@ -82,15 +106,23 @@ async def spectator_page(code: str):
 
 
 @app.post("/api/rooms")
-async def create_room():
+async def create_room(request: Request):
+    """Create a room. Body {"quiet": true} suppresses Discord/Nango posts for this room (worker tests)."""
     gc_rooms()
+    quiet = False
+    try:
+        body = await request.json()
+        quiet = bool(body.get("quiet"))
+    except Exception:
+        pass
+    quiet = quiet or request.query_params.get("quiet") == "1"
     solver = get_solver()
     for _ in range(50):
         code = new_code(_rng)
         if code not in rooms:
             break
-    rooms[code] = Room(code, solver, random.Random(_rng.random()))
-    return {"code": code}
+    rooms[code] = Room(code, solver, random.Random(_rng.random()), quiet=quiet)
+    return {"code": code, "quiet": quiet}
 
 
 @app.get("/api/rooms/{code}")
@@ -107,10 +139,15 @@ async def ws_room(ws: WebSocket, code: str):
     room = rooms.get(code)
     await ws.accept()
     if room is None and CODE_RE.match(code):
+        doc = await room_store().load(code)
+        if doc:
+            room = Room.from_doc(doc, get_solver())
+            rooms[code] = room
+    if room is None and CODE_RE.match(code):
         # Unknown but well-formed code (typically a link shared before a deploy reset the rooms):
         # recreate a fresh lobby under the same code so the shared link keeps working.
         gc_rooms()
-        room = Room(code, get_solver(), random.Random(_rng.random()))
+        room = Room(code, get_solver(), random.Random(_rng.random()), quiet=ws.query_params.get("quiet") == "1")
         room.recreated = True
         rooms[code] = room
     if room is None:
