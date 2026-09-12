@@ -378,6 +378,28 @@ Span count per Custom ID from `GET /api/request-logs/list/` at 21:45 UTC: `gemma
 `commentator` 2 (+5 under per-run ids `commentator-<run>` from the proxy smoke), `nano-vs-gemma-eval` 1,
 untagged gateway probes 7 — 17 spans total.
 
+**Proxy-mode retry with the Lambda endpoint (2026-09-12 21:57-22:02 UTC).** Custom provider
+`wordhunt-gemma` updated to `base_url=http://129.146.67.197:8000/v1` + the `gemma-lambda-api-key`
+bearer, custom model `google/gemma-4-12B-it` created (both `201`, listed under the org's custom
+models). The gateway still answers `404 Requested model … is not available in the model list` in
+~0.4 s — before any upstream attempt — for `google/gemma-4-12B-it`, `gemma-4-12b-it`,
+`wordhunt-gemma/…`, with and without `X-Respan-Route-Provider`, and 27+ minutes after creation,
+so it is not a cache lag. `credential_override.api_base` on an OpenAI-family slug is ignored
+(Respan tries OpenAI with our key → 401). API-created custom models are not resolvable by the
+gateway; the docs describe the UI flow (Providers → Add Custom Provider, Models → create), which
+may set a field the API does not — worth one try from the dashboard. Separately, the Lambda box
+did not answer TCP on `:8000` from the internet during the window (needs the port open before
+proxy mode can work at all). **Decision: log mode stays.**
+
+Config for the Cloud Run Gemma seat (log mode, traces tagged `gemma-seat` / `where=server`):
+`GEMMA_BASE_URL=http://129.146.67.197:8000/v1 GEMMA_MODELS=google/gemma-4-12B-it`
+`GEMMA_API_KEY=<gemma-lambda-api-key> RESPAN_ENABLED=1 RESPAN_MODE=log RESPAN_API_KEY=<respan-api-key>`
+(`deploy.sh` mounts `RESPAN_API_KEY` and sets `RESPAN_ENABLED=1`; export `RESPAN_MODE=log`).
+Any caller string works as a tag without code changes (`respan.respan_params("gemma-12b-lambda", …)`
+→ span `gemma-12b-lambda`, customer `wordhunt-vs/gemma-12b-lambda`); the registry seat itself is
+hard-wired to `gemma-seat`, so a `gemma-12b-lambda` span name would be a one-word change in
+`wordhunt/seats/gemma.py`.
+
 **Verification.** `python -m unittest integrations.test_respan` (17 tests, mock gateway: headers,
 model, tags, override, disabled passthrough, both modes for all three callers);
 `scripts/respan_smoke.py` fires one tagged request and prints the `unique_id` + Logs URL.
