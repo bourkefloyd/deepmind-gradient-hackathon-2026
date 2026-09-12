@@ -69,6 +69,13 @@ class ProtocolAdapter:
     def submit(self, tiles: list[int]) -> dict:
         raise NotImplementedError
 
+    def start(self, state: str) -> dict:
+        """Host-only: begin a round from `state` (lobby or results)."""
+        raise NotImplementedError
+
+    def is_host(self, ev: "RoomEvent", player_id: str) -> bool:
+        return False
+
     def parse(self, msg: dict) -> RoomEvent:
         raise NotImplementedError
 
@@ -85,6 +92,12 @@ class WordhuntV1Adapter(ProtocolAdapter):
 
     def submit(self, tiles: list[int]) -> dict:
         return {"type": "submit", "path": tiles}
+
+    def start(self, state: str) -> dict:
+        return {"type": "rematch" if state == "results" else "start"}
+
+    def is_host(self, ev: RoomEvent, player_id: str) -> bool:
+        return ev.payload.get("host_id") == player_id
 
     def parse(self, msg: dict) -> RoomEvent:
         t = msg.get("type")
@@ -295,6 +308,8 @@ async def run_bot(args: argparse.Namespace) -> None:
         current_board = ""
         round_task: asyncio.Task | None = None
         rounds = 0
+        started = 0
+        judged: list[dict] = []
         async for raw in ws:
             try:
                 msg = json.loads(raw)
@@ -309,8 +324,23 @@ async def run_bot(args: argparse.Namespace) -> None:
                     return
             elif ev.kind == "result":
                 p = ev.payload
-                log.info("judge %-10s ok=%s delta=%s %s", p.get("word"), p.get("ok"), p.get("delta"), p.get("reason", ""))
+                judged.append(p)
+                log.info(
+                    "judge %-10s ok=%s delta=%s total=%s %s",
+                    p.get("word"), p.get("ok"), p.get("delta"), p.get("total"), p.get("reason", ""),
+                )
             elif ev.kind in ("board", "phase"):
+                if (
+                    args.start
+                    and ev.state in ("lobby", "results")
+                    and started < max(1, args.rounds)
+                    and adapter.is_host(ev, player_id)
+                    and (ev.state == "lobby" or (round_task is not None and round_task.done()))
+                ):
+                    started += 1
+                    log.info("host: starting round %d", started)
+                    await send_json(adapter.start(ev.state))
+                    continue
                 if ev.state == "playing" and ev.board and ev.board != current_board:
                     current_board = ev.board
                     # Convert the server clock to our monotonic clock.
@@ -321,10 +351,18 @@ async def run_bot(args: argparse.Namespace) -> None:
                         round_task.cancel()
                     round_task = asyncio.create_task(seat.play_round(ev.board, deadline))
                     rounds += 1
-                elif ev.state in ("results", "lobby", "countdown"):
-                    if ev.state != "playing" and current_board and ev.state in ("results", "lobby"):
-                        current_board = ""
-                    if ev.state == "results" and round_task and round_task.done() and args.rounds and rounds >= args.rounds:
+                elif ev.state == "results" and current_board:
+                    current_board = ""
+                    if round_task is not None:
+                        await round_task
+                    ok = [p for p in judged if p.get("ok")]
+                    log.info(
+                        "results: %d judged, %d scored, total %s | %s",
+                        len(judged), len(ok), (ok[-1].get("total") if ok else 0),
+                        " ".join(str(p.get("word")) for p in ok),
+                    )
+                    judged.clear()
+                    if args.rounds and rounds >= args.rounds:
                         log.info("played %d rounds, leaving", rounds)
                         return
 
@@ -378,6 +416,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--race-s", type=float, default=75.0, help="fallback race length if the server sends none")
     p.add_argument("--safety-s", type=float, default=0.5, help="stop swiping this long before the buzzer")
     p.add_argument("--rounds", type=int, default=0, help="leave after this many rounds (0 = stay)")
+    p.add_argument("--start", action="store_true", help="if host, start the round(s) yourself")
+    p.add_argument("--create-room", action="store_true", help="POST /api/rooms first and join that code")
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -387,8 +427,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         asyncio.run(run_dry(args))
         return 0
+    if args.create_room:
+        import urllib.request
+
+        http = args.server.replace("ws://", "http://").replace("wss://", "https://").rstrip("/")
+        with urllib.request.urlopen(urllib.request.Request(f"{http}/api/rooms", method="POST"), timeout=5) as r:
+            args.room = json.load(r)["code"]
+        print(f"room {args.room}  ->  {http}/r/{args.room}", flush=True)
     if not args.room:
-        p.error("--room is required unless --dry-run")
+        p.error("--room is required unless --dry-run or --create-room")
     asyncio.run(run_bot(args))
     return 0
 

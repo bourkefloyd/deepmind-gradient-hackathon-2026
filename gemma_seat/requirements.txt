@@ -1,0 +1,3 @@
+openai>=1.50
+pillow>=10
+websockets>=12
