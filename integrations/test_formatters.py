@@ -58,6 +58,12 @@ class RoundEnded(unittest.TestCase):
         self.assertTrue(out.endswith("⚔️ **Think you can beat the bots?**\n**Rematch →** https://x.run.app/r/ABCD"))
         self.assertLess(len(out), 2000)
 
+    def test_level_theme_in_header(self):
+        p = {**BOURKE_PAYLOAD, "round": 3, "level": {"n": 3, "theme": "Kitchen"}}
+        out = formatters.round_ended(p)
+        self.assertEqual(out.splitlines()[0], "🎮 **Room 9N3G — Round 3 Results — Level 3 · Kitchen** 🎮")
+        self.assertEqual(out.splitlines()[2:], EXPECTED_RESULTS.splitlines()[2:])   # only the header changes
+
     def test_missing_board_stats_still_renders(self):
         p = {"code": "ZZZZ", "round": 2, "seats": [{"name": "A", "kind": "human", "score": 100, "n_words": 1}]}
         out = formatters.round_ended(p)

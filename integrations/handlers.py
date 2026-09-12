@@ -42,6 +42,9 @@ def from_room(room: Any) -> dict[str, Any]:
         "countdown_s": getattr(room, "countdown_s", None) or _module_const(room, "COUNTDOWN_S", 20),
         "race_s": getattr(room, "race_s", None) or _module_const(room, "RACE_S", 75),
     }
+    level = getattr(room, "level", None)
+    if level is not None:
+        p["level"] = level.public()
     if getattr(room, "results", None):
         r0 = room.results[0]
         p["board_best"] = r0.get("best_words", [])
@@ -75,6 +78,8 @@ def from_snapshot(snap: dict[str, Any], public_url: str = "") -> dict[str, Any]:
         "code": code, "round": snap.get("round", 0), "url": url, "seats": seats,
         "countdown_s": snap.get("countdown_s", 20), "race_s": snap.get("race_s", 75),
     }
+    if snap.get("level"):
+        p["level"] = dict(snap["level"])
     if snap.get("results"):
         r0 = snap["results"][0]
         p["board_best"] = r0.get("best_words", [])

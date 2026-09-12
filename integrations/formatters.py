@@ -9,7 +9,7 @@ Payload shapes (all keys optional except code):
     round_started: {code, round, race_s, seats: [{name, kind, label}]}
     round_ended:   {code, round, url, seats: [{name, kind, label, score, n_words,
                     words: [[word, pts], ...], invalid: int, best_word, best_pts}],
-                    board_best: [word, ...], max_score, n_board_words}
+                    board_best: [word, ...], max_score, n_board_words, level: {n, theme}}
 """
 from __future__ import annotations
 
@@ -76,9 +76,17 @@ def seat_block(rank: int, s: dict) -> str:
     return "\n".join(lines)
 
 
+def level_suffix(p: dict) -> str:
+    """' — Level 3 · Kitchen' when the payload carries a themed level, else ''."""
+    lvl = p.get("level") or {}
+    if not lvl.get("theme"):
+        return ""
+    return f" — Level {lvl.get('n', '?')} · {lvl['theme']}"
+
+
 def round_ended(p: dict) -> str:
     code, rnd = p["code"], p.get("round", 1)
-    parts = [f"🎮 **Room {code} — Round {rnd} Results** 🎮"]
+    parts = [f"🎮 **Room {code} — Round {rnd} Results{level_suffix(p)}** 🎮"]
     for i, s in enumerate(_ranked(p.get("seats", [])), 1):
         parts.append(seat_block(i, s))
     stats = ["**Board Stats**"]

@@ -11,6 +11,7 @@ from typing import Any, Callable, Awaitable
 
 from .board import generate_board, load_packed_boards
 from .hand import Hand, HandProfile
+from .levels import Level, get_levels, level_for_round
 from .scoring import score_word
 from .seats import registry
 from .seats.base import Policy
@@ -91,6 +92,7 @@ class Room:
         self.state = "lobby"            # lobby | countdown | playing | results
         self.board = ""
         self.words: dict[str, list[int]] = {}
+        self.level: Level | None = None
         self.round_no = 0
         self.ticker: list[dict] = []
         self.phase_ends_at = 0.0
@@ -202,6 +204,7 @@ class Room:
             "code": self.code,
             "state": self.state,
             "round": self.round_no,
+            "level": self.level.public() if self.level else None,
             "host_id": self.host_id,
             "board": self.board if self.state in ("playing", "results") else "",
             "n_board_words": len(self.words) if self.state in ("playing", "results") else 0,
@@ -331,7 +334,10 @@ class Room:
         _emit("round_ended", self)
 
     def _next_board(self) -> tuple[str, dict[str, list[int]]]:
-        """Packed boards first (stage-safe, known long words), random live boards after."""
+        """Themed levels in order (WH_LEVELS, wraps); else packed boards, then random live boards."""
+        self.level = level_for_round(get_levels(), self.round_no)
+        if self.level:
+            return self.level.board, self.solver.solve(self.level.board)
         while self._boards:
             b = self._boards.pop()
             words = self.solver.solve(b)
