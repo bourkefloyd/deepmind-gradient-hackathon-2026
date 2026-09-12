@@ -30,7 +30,7 @@ class SeatSpec:
 GEMMA_PROFILE = HandProfile(hz=10, lag=(0.15, 0.3), think=(0.6, 1.4), p_wrong=0.05, p_hesitate=0.04)
 # The nano hesitates and backs out on its own (abort actions), so the hand adds no wrong taps.
 # Between-word think time bounds its pace (PLAN: "speed is bounded"); WH_NANO_THINK="1.0,2.2" overrides.
-_think = tuple(float(x) for x in os.environ.get("WH_NANO_THINK", "1.0,2.2").split(","))
+_think = tuple(float(x) for x in os.environ.get("WH_NANO_THINK", "1.5,3.0").split(","))
 NANO_PROFILE = HandProfile(hz=10, lag=(0.15, 0.3), think=(_think[0], _think[-1]), p_wrong=0.0, p_hesitate=0.03)
 
 

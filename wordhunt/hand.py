@@ -54,6 +54,7 @@ class Hand:
         await self.policy.start_round(board, words)
 
     def on_result(self, word: str, ok: bool, reason: str) -> None:
+        word = word.lower()           # judged entries carry the word uppercased; policies compare lowercase
         if ok:
             self.found.add(word)
         self.policy.on_result(word, ok, reason)
