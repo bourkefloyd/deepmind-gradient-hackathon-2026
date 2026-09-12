@@ -132,6 +132,36 @@ Note: with `WH_INTEGRATIONS=1` on the server, `round_ended` also posts the templ
 server-side, so during a commentated match Discord gets the leaderboard (server) and the
 trash talk (Gemma via the tool). Set `WH_INTEGRATIONS=0` if only the model should speak.
 
+## Respan (traces for every Gemma call)
+
+`respan.py` routes the three Gemma callers through the [Respan](https://respan.ai) AI gateway so each
+call shows up as a tagged span (model, tokens, latency, our metadata). Stdlib only; everything is
+behind env, default off:
+
+| var | meaning |
+|---|---|
+| `RESPAN_ENABLED=1` | turn on (no-op without a key) |
+| `RESPAN_API_KEY` | Respan key (Cloud Run: Secret Manager `respan-api-key`, mounted by `scripts/deploy.sh`) |
+| `RESPAN_BASE_URL` | gateway base, default `https://api.respan.ai/api` |
+| `RESPAN_MODE` | `proxy` (default; chat call goes to `<base>/chat/completions` with `Authorization: Bearer <key>`) or `log` (call Gemma directly, then POST the finished call to `<base>/request-logs/create/` — Respan's "log without proxying") |
+| `RESPAN_MODEL` | optional model id to send instead of the upstream Gemma name (a custom model on Respan, or a hosted model for the fallback) |
+| `RESPAN_CREDENTIAL_OVERRIDE` | `1`/`0` force the per-request `credential_override` (upstream `api_base`/`api_key`) on/off; default on when the upstream is not loopback |
+| `RESPAN_ENV` | `metadata.environment` (deploy sets `cloud-run`) |
+
+Tags on every span (`respan.respan_params`): `span_name`, `custom_identifier` = caller
+(`gemma-seat`, `commentator`, `nano-vs-gemma-eval`), `customer_identifier` = `wordhunt-vs/<caller>`,
+`thread_identifier` = `<caller>:<room or eval run>`, `metadata` = `{app, trace, caller, upstream_model,
+upstream_base_url, environment, host, build, where, board, modality, room, round, ...}`.
+Callers: `gemma_seat/client.py` (bot → `gemma-seat`, `eval.py` → `nano-vs-gemma-eval`),
+`commentator.py` (→ `commentator`), `wordhunt/seats/gemma.py` (→ `gemma-seat`, `where=server`).
+
+```
+python -m unittest integrations.test_respan            # mock gateway: headers, tags, override, both modes
+RESPAN_API_KEY=... python scripts/respan_smoke.py --mode log --caller commentator   # one real span, prints unique_id
+RESPAN_API_KEY=... python scripts/respan_smoke.py --model gemma-4-12b-it            # proxy through a custom model
+```
+Which path is live and why: see `docs/architecture.md` § Respan.
+
 ## v2: room threads (not wired)
 
 Wanted flow: `room_created` → message in the main channel + thread from it; `round_started`
@@ -156,5 +186,6 @@ events.py      on(), emit(), drain(); fire-and-forget with timeout
 handlers.py    from_room(Room) → payload; discord_recap handler; register()
 tools.py       OpenAI tool schema + dispatch for the Gemma commentator
 commentator.py one model call with the tool; spectator client for the Cloud Run game
+respan.py      Respan gateway routing + tags for every Gemma call (proxy / log modes); test_respan.py
 demo.py        python -m integrations.demo [--live | --connections | --tool]
 ```

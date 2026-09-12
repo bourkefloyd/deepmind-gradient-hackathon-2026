@@ -330,6 +330,53 @@ flowchart LR
 
 ---
 
+## 5b. Respan: traces for every Gemma call
+
+[Respan](https://respan.ai) is an OpenAI-compatible AI gateway with tracing/evals. All Gemma
+traffic in this repo goes through `integrations/respan.py` (stdlib only) and is off unless
+`RESPAN_ENABLED=1` and `RESPAN_API_KEY` are set; with them unset every caller behaves exactly as
+before.
+
+```mermaid
+flowchart LR
+  A[gemma_seat bot / eval<br/>Mac] -->|gemma-seat / nano-vs-gemma-eval| R
+  C[integrations/commentator.py] -->|commentator| R
+  S[wordhunt/seats/gemma.py<br/>Cloud Run] -->|gemma-seat where=server| R
+  R{{Respan gateway<br/>api.respan.ai/api}} -->|proxy mode: credential_override / custom provider| G[Gemma: mlx-vlm tunnel or Lambda vLLM]
+  A & C & S -. log mode: call Gemma directly,<br/>then POST /request-logs/create .-> R
+```
+
+**What is traced.** One span per chat call: model, prompt/completion, tokens, latency, status, plus
+our tags — `span_name`/`custom_identifier` = caller (`gemma-seat`, `commentator`,
+`nano-vs-gemma-eval`), `customer_identifier` = `wordhunt-vs/<caller>`, `thread_identifier` =
+`<caller>:<room code | server-BOARD | seedN-nM-modality>`, `metadata` = app, trace, caller,
+upstream_model, upstream_base_url, environment, host, build, where (`mac-bot` / `server` /
+`commentator` / `eval`), board, modality, room, round, tool_called. Filter the Logs page by
+Custom ID or any custom property; `/api/health` reports `respan: {enabled, mode, base_url}`.
+
+**Env.** `RESPAN_ENABLED`, `RESPAN_API_KEY`, `RESPAN_BASE_URL` (default `https://api.respan.ai/api`),
+`RESPAN_MODE` (`proxy` | `log`), `RESPAN_MODEL`, `RESPAN_CREDENTIAL_OVERRIDE`, `RESPAN_ENV`.
+`scripts/deploy.sh` mounts Secret Manager `respan-api-key` as `RESPAN_API_KEY` and sets
+`RESPAN_ENABLED=1`, `RESPAN_ENV=cloud-run` when the deploying SA can read the secret (same
+pattern as `nango-secret-key`); `RESPAN_ENABLED=0` skips it.
+
+**Two paths, and which one is live.**
+
+| mode | how | when |
+|---|---|---|
+| `proxy` | request goes to `POST <RESPAN_BASE_URL>/chat/completions` with `Authorization: Bearer <RESPAN_API_KEY>`, the upstream Gemma model name (or `RESPAN_MODEL`), the tags above, and — when the upstream is not loopback — `credential_override: {model: {api_base, api_key}}` pointing at our endpoint. Respan also supports registering the endpoint once as a **custom provider + custom model** (Providers → Add Custom Provider; Models → create; or `POST /api/providers/`, `POST /api/models/`). | Lambda vLLM (public IP) or a tunnelled Mac. Verified 2026-09-12: gateway auth + tagging work and even failed attempts are logged as spans; a custom provider/model created via API (`wordhunt-gemma` / `gemma-4-12b-it`) was still answered `404 not available in the model list` by the gateway within the test window, so proxy mode to our own Gemma is **not yet confirmed end-to-end** — re-test after creating the provider/model in the UI (`scripts/respan_smoke.py --model gemma-4-12b-it`). |
+| `log` | call Gemma directly (unchanged), then a daemon thread POSTs the finished call to `<RESPAN_BASE_URL>/request-logs/create/` with the same tags ("log without proxying" in Respan's custom-provider docs). | **This is the path that produced real traces today**: `scripts/respan_smoke.py --mode log` returned `201` with `unique_id`s for all three callers and they read back from `GET /api/request-logs/list/`. Works for Gemma on the Mac at `localhost:8080` (Respan's cloud cannot reach it) and needs no model registration. Set `RESPAN_MODE=log` on the Mac and on Cloud Run until proxy mode is confirmed. |
+
+Screenshot placeholder: `docs/respan-trace.png` — Respan Logs page filtered to
+`custom_identifier = gemma-seat` showing the span waterfall (to be captured from Bourke's
+dashboard; the API key alone cannot render the UI).
+
+**Verification.** `python -m unittest integrations.test_respan` (17 tests, mock gateway: headers,
+model, tags, override, disabled passthrough, both modes for all three callers);
+`scripts/respan_smoke.py` fires one tagged request and prints the `unique_id` + Logs URL.
+
+---
+
 ## 6. Repo map, runbook, local vs cloud
 
 ### Repo map
@@ -369,6 +416,7 @@ gemma_seat/             Gemma 12B bot and evals (Mac-side)
   results/              eval_n20_seed0*.{md,json}, speculative_decoding_note.md
 integrations/           Nango -> Discord (ships to Cloud Run via Dockerfile; also run on the Mac)
   config.py nango.py discord.py formatters.py events.py handlers.py tools.py commentator.py demo.py test_formatters.py
+  respan.py test_respan.py   Respan gateway routing/tags for every Gemma call (§5b); scripts/respan_smoke.py fires one span
 scripts/deploy.sh       tagged Cloud Run revision via crane; scripts/promote.sh moves traffic
 Dockerfile              source-mode image (DEPLOY_MODE=source); word lists fetched at build
 Makefile                setup, words, check-mps, data/train, mlxvlm-up/status/stop, gemma-seat
