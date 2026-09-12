@@ -2,16 +2,19 @@
   "guild_id": "1547705063609470976",
   "guild_name": "Open Model Hack - Gradient x Google Deepmind",
   "invite_url": "https://discord.gg/db3aDstTX",
-  "invite_lands_in": {
-    "channel_id": "1547705064099942432",
-    "name": "general"
-  },
   "requested_channel_name": "wordhunt",
   "nango": {
-    "provider": "discord",
-    "shared_oauth": false,
-    "webhook_integration_id": "discord-wordhunt",
-    "bot_integration_id": "discord"
+    "integration_id": "discord-wordhunt",
+    "provider": "unauthenticated",
+    "connection_id": "5ed2de56-09c0-4444-b53b-d4b74174078a",
+    "end_user_id": "wordhunt-buzzer-discord",
+    "action": "send-discord-recap",
+    "action_version": "v1.0.0",
+    "runtime_mcp_url": "https://api.nango.dev/mcp",
+    "test": {
+      "ok": true,
+      "status": 200
+    }
   },
-  "notes": "You are not a guild admin. Admin must create #wordhunt and either give a channel webhook URL or invite a bot. Gemma should still function-call Nango; do not post from the Word Hunt server."
+  "notes": "Gemma should call Nango send-discord-recap with {text}. The Discord webhook URL is stored in the Nango action, not in git. Rotate the webhook after the event because it was pasted in chat."
 }

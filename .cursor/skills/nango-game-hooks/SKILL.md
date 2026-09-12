@@ -42,7 +42,7 @@ Management MCP is attached to Cloud Agents as namespace `nango`. Slack is create
 | Discord guild | Open Model Hack - Gradient x Google Deepmind (`1547705063609470976`) |
 | Discord invite | https://discord.gg/db3aDstTX (lands in `#general`) |
 | Discord channel wanted | `wordhunt` (admin must create; you are not an admin) |
-| Discord Nango | no shared OAuth app. Need `DISCORD_WEBHOOK_URL` (preferred) or `DISCORD_CLIENT_ID` + `DISCORD_CLIENT_SECRET` + bot invite |
+| Discord Nango | `discord-wordhunt` unauthenticated, connection `5ed2de56-09c0-4444-b53b-d4b74174078a`, action `send-discord-recap@v1.0.0` (posted test, HTTP 200) |
 
 After the user authorizes Slack, `connections_list` with `end_user_id=wordhunt-buzzer` (or tag `purpose=wordhunt-buzzer`), then `actions_trigger` `list-channels` and a test `send-message`.
 
