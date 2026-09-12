@@ -155,5 +155,6 @@ formatters.py  room_created / round_started / round_ended → Discord markdown
 events.py      on(), emit(), drain(); fire-and-forget with timeout
 handlers.py    from_room(Room) → payload; discord_recap handler; register()
 tools.py       OpenAI tool schema + dispatch for the Gemma commentator
+commentator.py one model call with the tool; spectator client for the Cloud Run game
 demo.py        python -m integrations.demo [--live | --connections | --tool]
 ```
