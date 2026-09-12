@@ -1,7 +1,7 @@
 # Word Hunt arena - nano training + local Gemma understudy. Targets check-mps and mlxvlm-* are ported from
 # actionfleet's Makefile (same model tag and flags).
 
-.PHONY: help setup words check-mps data-smoke train-smoke rollout-smoke data train mlxvlm-up mlxvlm-down mlxvlm-stop mlxvlm-status
+.PHONY: help setup words check-mps data-smoke train-smoke rollout-smoke data train mlxvlm-up mlxvlm-down mlxvlm-stop mlxvlm-status gemma-seat
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -91,6 +91,29 @@ mlxvlm-up: ## Start the mlx-vlm OpenAI-compatible server for Gemma 4 12B (Apple 
 		echo -e "  $(GREEN)mlx-vlm server is up (logs: /tmp/wordhunt-mlxvlm.log).$(RESET)"; \
 	fi
 	@echo -e "$(GREEN)Ready: OpenAI-compatible endpoint at $(MLXVLM_HOST)/v1 (Gemma 4 12B, vision intact).$(RESET)"
+
+# ---------------------------------------------------------------------------
+# Gemma 12B seat: this Mac's mlx-vlm plays in a room (local or Cloud Run) over ws(s)
+#   make gemma-seat ROOM=AB12 SERVER=https://wordhunt-xxxx.a.run.app
+#   SEAT_ARGS="--modality image --filter-solver --rounds 1 --start" for variants
+# ---------------------------------------------------------------------------
+ROOM      ?=
+SERVER    ?= ws://localhost:8000
+SEAT_ARGS ?=
+
+gemma-seat: ## Join room ROOM on SERVER as the Gemma 12B seat (needs mlxvlm-up); SEAT_ARGS for extras
+	@if [ -z "$(ROOM)" ]; then echo -e "$(RED)Usage: make gemma-seat ROOM=CODE SERVER=https://...$(RESET)"; exit 1; fi
+	@if ! $(PYTHON) -c "import openai, PIL, websockets" >/dev/null 2>&1; then \
+		echo "  installing gemma_seat deps into .venv..."; \
+		if command -v uv >/dev/null 2>&1; then uv pip install -q --python $(PYTHON) -r gemma_seat/requirements.txt; \
+		else $(PYTHON) -m pip install -q -r gemma_seat/requirements.txt; fi; \
+	fi
+	@if ! curl -fsS "$(MLXVLM_HOST)/health" >/dev/null 2>&1; then \
+		echo -e "$(RED)mlx-vlm is not running at $(MLXVLM_HOST); run 'make mlxvlm-up' first.$(RESET)"; exit 1; \
+	fi
+	@echo -e "$(CYAN)Gemma 12B seat -> room $(ROOM) on $(SERVER)$(RESET)"
+	@MLXVLM_BASE_URL="$(MLXVLM_HOST)/v1" MLXVLM_MODEL="$(MLXVLM_MODEL)" \
+		$(PYTHON) -m gemma_seat.bot --room "$(ROOM)" --server "$(SERVER)" $(SEAT_ARGS)
 
 mlxvlm-down: mlxvlm-stop ## Alias for mlxvlm-stop
 

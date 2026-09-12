@@ -36,7 +36,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from .boards import find_path, grid_text, score_word
+from .boards import best_effort_path, find_path, grid_text, score_word
 
 log = logging.getLogger("gemma_seat.bot")
 
@@ -80,9 +80,26 @@ class ProtocolAdapter:
         raise NotImplementedError
 
 
+def ws_base(server: str) -> str:
+    """Accept ws://, wss://, http:// or https:// (Cloud Run) and return a ws(s) base."""
+    s = server.strip().rstrip("/")
+    if s.startswith("https://"):
+        return "wss://" + s[len("https://"):]
+    if s.startswith("http://"):
+        return "ws://" + s[len("http://"):]
+    if s.startswith(("ws://", "wss://")):
+        return s
+    return "wss://" + s  # bare Cloud Run host
+
+
+def http_base(server: str) -> str:
+    s = ws_base(server)
+    return ("https://" + s[len("wss://"):]) if s.startswith("wss://") else ("http://" + s[len("ws://"):])
+
+
 class WordhuntV1Adapter(ProtocolAdapter):
     def ws_url(self, server: str, room: str) -> str:
-        return f"{server.rstrip('/')}/ws/{room.upper()}"
+        return f"{ws_base(server)}/ws/{room.upper()}"
 
     def hello(self, name: str, player_id: str) -> dict:
         return {"type": "hello", "player_id": player_id, "name": name}
@@ -188,16 +205,47 @@ class Hand:
 # Seat: Gemma -> queue -> hand
 # --------------------------------------------------------------------------------------
 class GemmaSeat:
-    def __init__(self, client, modality: str, hand: Hand, rng: random.Random, clock=time.monotonic):
+    """Gemma's words -> the hand.
+
+    Default is *raw*: every distinct 3+ letter word Gemma emits is swiped, on a
+    legal path if one exists and on a best-effort 'jumping' path if not, so the
+    server judges it and the ticker shows the miss. The only drop is a word whose
+    letters are not on the board at all (a human would not try those either);
+    those are counted in `dropped`. No dictionary at the seat.
+
+    `filter_solver=True` is the comparison mode: skip anything not traceable on
+    the board and, when enable1 is available, anything not in the dictionary.
+    """
+
+    def __init__(
+        self,
+        client,
+        modality: str,
+        hand: Hand,
+        rng: random.Random,
+        clock=time.monotonic,
+        filter_solver: bool = False,
+    ):
         self.client = client
         self.modality = modality
         self.hand = hand
         self.rng = rng
         self.clock = clock
+        self.filter_solver = filter_solver
+        self.dictionary = None
+        if filter_solver:
+            try:
+                from .boards import load_dictionary
+
+                self.dictionary = load_dictionary()
+            except FileNotFoundError:
+                log.warning("--filter-solver: no word list found, filtering on adjacency only")
         self.queue: asyncio.Queue[str | None] = asyncio.Queue()
         self.seen: set[str] = set()
         self.submitted: list[str] = []
-        self.skipped: list[str] = []
+        self.skipped: list[str] = []  # filter mode: not traceable / not a word
+        self.dropped: list[str] = []  # raw mode: letters not on the board
+        self.jumped: list[str] = []  # raw mode: swiped on an illegal path (visible miss)
         self.calls = 0
 
     def _fetch_words(
@@ -231,6 +279,8 @@ class GemmaSeat:
         self.seen.clear()
         self.submitted.clear()
         self.skipped.clear()
+        self.dropped.clear()
+        self.jumped.clear()
         self.calls = 0
         self._start_fetch(board, deadline)
         model_done = False
@@ -246,27 +296,45 @@ class GemmaSeat:
                     continue
                 model_done = True
                 break
-            if w in self.seen:
+            if w in self.seen or len(w) < 3:
                 continue
             self.seen.add(w)
-            tiles = find_path(board, w)
+            tiles = self._path_for(board, w)
             if tiles is None:
-                # Not traceable on the board: a human would notice mid-swipe. Skip,
-                # do not burn the cadence on it (the ticker shows misses only for
-                # words the hand actually submits).
-                self.skipped.append(w)
-                log.info("skip %-10s (not on board)", w)
                 continue
             ok = await self.hand.play_word(w, tiles, deadline)
             if ok:
                 self.submitted.append(w)
-                log.info("swipe %-10s +%d", w.upper(), score_word(w))
+                log.info("swipe %-10s %s", w.upper(), "(jump)" if w in self.jumped else "")
             else:
                 break
         log.info(
-            "round over: %d submitted, %d skipped, %d model calls, model_done=%s",
-            len(self.submitted), len(self.skipped), self.calls, model_done,
+            "round over: %d submitted (%d on illegal paths), %d dropped (letters not on board), "
+            "%d skipped by filter, %d model calls, model_done=%s",
+            len(self.submitted), len(self.jumped), len(self.dropped), len(self.skipped),
+            self.calls, model_done,
         )
+
+    def _path_for(self, board: str, w: str) -> list[int] | None:
+        if self.filter_solver:
+            tiles = find_path(board, w)
+            if tiles is None:
+                self.skipped.append(w)
+                log.info("skip %-10s (not on board)", w)
+                return None
+            if self.dictionary is not None and w not in self.dictionary:
+                self.skipped.append(w)
+                log.info("skip %-10s (not a word)", w)
+                return None
+            return tiles
+        tiles = best_effort_path(board, w)
+        if tiles is None:
+            self.dropped.append(w)
+            log.info("drop %-10s (letters not on board)", w)
+            return None
+        if find_path(board, w) is None:
+            self.jumped.append(w)
+        return tiles
 
 
 # --------------------------------------------------------------------------------------
@@ -311,7 +379,7 @@ async def run_bot(args: argparse.Namespace) -> None:
                 await send_json(adapter.path([]))
 
         hand = Hand(HandConfig(), rng, hand_send)
-        seat = GemmaSeat(client, args.modality, hand, rng)
+        seat = GemmaSeat(client, args.modality, hand, rng, filter_solver=args.filter_solver)
         await send_json(adapter.hello(args.name, player_id))
 
         current_board = ""
@@ -399,12 +467,13 @@ async def run_dry(args: argparse.Namespace) -> None:
 
     hand = Hand(HandConfig(), rng, hand_send)
     client = _client(args)
-    seat = GemmaSeat(client, args.modality, hand, rng)
+    seat = GemmaSeat(client, args.modality, hand, rng, filter_solver=args.filter_solver)
     await seat.play_round(board, time.monotonic() + args.race_s)
     valid = [w for w in seat.submitted if validate(board, w, d)[0]]
     print(
         f"\n{len(seat.submitted)} swiped ({len(valid)} valid, score {sum(score_word(w) for w in valid)}), "
-        f"{len(seat.skipped)} skipped as not-on-board, {tiles_sent} tile steps in {time.monotonic() - t0:.1f}s"
+        f"{len(seat.jumped)} on illegal paths, {len(seat.dropped)} dropped (letters not on board), "
+        f"{len(seat.skipped)} skipped by filter, {tiles_sent} tile steps in {time.monotonic() - t0:.1f}s"
     )
 
 
@@ -413,7 +482,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--room", help="room code to join")
-    p.add_argument("--server", default="ws://localhost:8000", help="game server ws base URL")
+    p.add_argument("--server", default="ws://localhost:8000",
+                   help="game server base URL: ws://, wss://, http:// or https:// (Cloud Run) all work")
     p.add_argument("--protocol", choices=sorted(ADAPTERS), default="v1")
     p.add_argument("--name", default="Gemma 12B")
     p.add_argument("--player-id", default=None)
@@ -427,6 +497,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--race-s", type=float, default=75.0, help="fallback race length if the server sends none")
     p.add_argument("--safety-s", type=float, default=0.5, help="stop swiping this long before the buzzer")
     p.add_argument("--rounds", type=int, default=0, help="leave after this many rounds (0 = stay)")
+    p.add_argument("--filter-solver", action="store_true",
+                   help="comparison mode: skip words not traceable on the board / not in enable1 (default: raw)")
     p.add_argument("--start", action="store_true", help="if host, start the round(s) yourself")
     p.add_argument("--create-room", action="store_true", help="POST /api/rooms first and join that code")
     p.add_argument("--seed", type=int, default=None)
@@ -441,7 +513,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.create_room:
         import urllib.request
 
-        http = args.server.replace("ws://", "http://").replace("wss://", "https://").rstrip("/")
+        http = http_base(args.server)
         with urllib.request.urlopen(urllib.request.Request(f"{http}/api/rooms", method="POST"), timeout=5) as r:
             args.room = json.load(r)["code"]
         print(f"room {args.room}  ->  {http}/r/{args.room}", flush=True)

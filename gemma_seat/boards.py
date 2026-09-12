@@ -157,6 +157,52 @@ def find_path(board: str, word: str) -> list[int] | None:
     return None
 
 
+def letters_available(board: str, word: str) -> bool:
+    """True if the board has enough of each letter to spell `word` (no adjacency)."""
+    have: dict[str, int] = {}
+    for ch in board.lower():
+        have[ch] = have.get(ch, 0) + 1
+    for ch in word.lower():
+        if have.get(ch, 0) <= 0:
+            return False
+        have[ch] -= 1
+    return True
+
+
+def best_effort_path(board: str, word: str) -> list[int] | None:
+    """A tile path for `word` the way a hand would try it, legal or not.
+
+    Legal path if one exists; otherwise a greedy path that picks, for each
+    letter, an unused tile with that letter, preferring a neighbour of the
+    previous tile and else the nearest one (a 'jump', which the server judges as
+    a miss). None only if the board lacks the letters altogether.
+    """
+    legal = find_path(board, word)
+    if legal is not None:
+        return legal
+    if not letters_available(board, word):
+        return None
+    board = board.lower()
+    used: set[int] = set()
+    path: list[int] = []
+    for ch in word.lower():
+        options = [i for i in range(SIZE * SIZE) if board[i] == ch and i not in used]
+        if not options:
+            return None
+        if path:
+            prev = path[-1]
+            pr, pc = divmod(prev, SIZE)
+
+            def dist(i: int) -> tuple[int, int]:
+                r, c = divmod(i, SIZE)
+                return (0 if i in NEIGHBORS[prev] else 1, max(abs(r - pr), abs(c - pc)))
+
+            options.sort(key=dist)
+        path.append(options[0])
+        used.add(options[0])
+    return path
+
+
 def validate(board: str, word: str, dictionary: Dictionary) -> tuple[bool, str]:
     """(valid, reason) where reason in {'ok', 'short', 'not_word', 'not_on_board'}."""
     w = word.lower()

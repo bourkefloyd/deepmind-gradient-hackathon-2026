@@ -76,12 +76,32 @@ Text modality, thinking off, one call up front (~2 s) then re-asks.
 
 ## Bot
 
-`bot.py` joins `ws://<server>/ws/<CODE>` and drains Gemma's words through
-`Hand`: 150-300 ms reaction lag per word, one tile per ~10 Hz tick (jittered),
-occasional wrong-neighbour slip + backtrack, then submit. Words that cannot be
-traced on the board are skipped (a human would notice mid-swipe); traceable
-non-words are swiped and judged as misses on the ticker. When Gemma's list runs
+`bot.py` joins `<server>/ws/<CODE>` and drains Gemma's words through `Hand`:
+150-300 ms reaction lag per word, one tile per ~10 Hz tick (jittered),
+occasional wrong-neighbour slip + backtrack, then submit. When Gemma's list runs
 dry and time remains, it is re-asked with the words already tried fed back.
+
+**Raw by default, no dictionary at the seat.** Every distinct 3+ letter word
+Gemma emits is swiped: on a legal path when one exists, otherwise on a
+best-effort path that jumps to the nearest tile with the next letter, so the
+server judges it and the ticker shows `Gemma 12B LIPE - miss`. The only drop is
+a word whose letters are not on the board at all (a human would not try it
+either); the count is logged per round. `--filter-solver` is the comparison
+mode from the first live race (skip untraceable words, and non-enable1 words if
+the list is present).
+
+Live races, local server, 75 s, text modality:
+
+| mode | judged | ok | valid rate | score | vs reflex bots |
+|---|---:|---:|---:|---:|---|
+| `--filter-solver` (room QDH9) | 15 | 15 | 100% (filtered) | 7400 | 3400 / 5900 |
+| raw (room G6WK) | 65 | 18 | 28% | 6800 | 4000 / 6400 |
+| raw (room DQ8L) | 101 | 39 | 39% | 15500 | - |
+
+`--server` takes `ws://`, `wss://`, `http://` or `https://` (Cloud Run): the bot
+runs on the Mac next to mlx-vlm and joins the remote room over wss.
+`make gemma-seat ROOM=CODE SERVER=https://<cloud-run-host>` from the repo root
+(`SEAT_ARGS="--modality image --rounds 1"` for variants).
 
 The protocol sits behind `ProtocolAdapter`; `WordhuntV1Adapter` follows the
 iteration-1 draft (`hello` / `state` / `path` / `submit` / `mine`). Update it
