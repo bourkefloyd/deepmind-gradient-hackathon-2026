@@ -172,7 +172,7 @@ gcloud run deploy "$SERVICE" \
   --min-instances 1 --max-instances 1 \
   --session-affinity \
   --timeout 3600 \
-  --cpu 1 --memory 1Gi \
+  --cpu 1 --memory 2Gi \
   --quiet
 
 SERVICE_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
