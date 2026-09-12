@@ -126,6 +126,12 @@ def board_samples(board: str, solver: Solver, ranks: dict[str, int], rng: np.ran
         p = sample_path(info, rng)
         for k in range(len(p) + 1):
             prefixes.add(p[:k])
+    return rows_from_info(board, info, prefixes, rng, dead_frac)
+
+
+def rows_from_info(board: str, info: PrefixInfo, prefixes: Iterable[tuple[int, ...]], rng: np.random.Generator | None = None, dead_frac: float = 0.0) -> list[tuple]:
+    """Emit one soft-target row per prefix in `prefixes` (all must be keys of `info`), plus mined dead rows.
+    Dead mining needs the full dictionary annotation; pass dead_frac=0 for partial word sets (live learning)."""
     rows = []
     letters = np.frombuffer(board.encode(), dtype=np.uint8) - 97
     for p in sorted(prefixes, key=lambda q: (len(q), q)):
@@ -140,12 +146,48 @@ def board_samples(board: str, solver: Solver, ranks: dict[str, int], rng: np.ran
         ty = np.array([ext, w_word, 0.0], np.float32)
         ty /= ty.sum()
         rows.append((letters, p, tgt, ty, 1))
-        if dead_frac > 0 and len(p) < MAX_LEN and rng.random() < dead_frac:
+        if dead_frac > 0 and rng is not None and len(p) < MAX_LEN and rng.random() < dead_frac:
             dead = [j for j in legal_moves(p) if j not in kids]
             if dead:
                 j = int(rng.choice(dead))
                 rows.append((letters, p + (j,), np.zeros(16, np.float32), np.array([0.0, 0.0, 1.0], np.float32), 0))
     return rows
+
+
+def word_paths(board: str, word: str) -> list[tuple[int, ...]]:
+    """Every tile path spelling `word` on the board (no dictionary involved)."""
+    board = board.lower()
+    word = word.lower()
+    out: list[tuple[int, ...]] = []
+    stack = [((i,), 1 << i) for i in range(16) if board[i] == word[0]]
+    while stack:
+        path, used = stack.pop()
+        k = len(path)
+        if k == len(word):
+            out.append(path)
+            continue
+        for j in NEIGHBORS[path[-1]]:
+            if not used & (1 << j) and board[j] == word[k]:
+                stack.append((path + (j,), used | (1 << j)))
+    return out
+
+
+def info_from_words(board: str, words: Iterable[str], ranks: dict[str, int]) -> PrefixInfo:
+    """Prefix annotation built from a known word set only (validated words found in a round), same posterior
+    semantics as `annotate` but restricted to those words; a word with several paths splits its mass."""
+    acc: dict[tuple[int, ...], list] = {}  # path -> [w_word, {kid: mass}]
+    for w in set(words):
+        paths = word_paths(board, w)
+        if not paths:
+            continue
+        m = word_weight(w, ranks) / len(paths)
+        for p in paths:
+            for k in range(len(p)):
+                node = acc.setdefault(p[:k], [0.0, {}])
+                node[1][p[k]] = node[1].get(p[k], 0.0) + m
+            node = acc.setdefault(p, [0.0, {}])
+            node[0] += m
+    return {p: (v[0], v[1]) for p, v in acc.items()}
 
 
 def pack(rows: list[tuple], bid: int) -> dict[str, np.ndarray]:
