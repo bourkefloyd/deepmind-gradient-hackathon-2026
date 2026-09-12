@@ -138,6 +138,9 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .lb .best b{color:var(--ink);font-weight:700}
 .lb .score{grid-row:1/span 2;grid-column:4;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
 .lb .medal{grid-row:1/span 2}.lb .av{grid-row:1/span 2}
+/* hover (desktop) or tap (touch) reveals the full name by hiding the best-words line */
+@media (hover:hover){.lb:hover .best{display:none}.lb:hover .nm{white-space:normal;overflow:visible;grid-row:1/span 2}}
+.lb.reveal-name .best{display:none}.lb.reveal-name .nm{white-space:normal;overflow:visible;grid-row:1/span 2}
 /* per-seat mini boards (desktop only) + big finds */
 .minis{display:none;grid-template-columns:1fr 1fr;gap:8px;align-content:start}
 .mini{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;min-width:0}
@@ -585,7 +588,9 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 function noteBest(e){if(!e.ok)return;const l=BEST[e.seat_id]||(BEST[e.seat_id]=[]);l.push([e.word,e.delta]);l.sort((a,b)=>b[1]-a[1]);if(l.length>3)l.length=3}
 function bestLine(s,reveal){const l=reveal&&s.words?s.words.slice(0,3):(BEST[s.seat_id]||[]);return l.length?l.map(([w])=>`<b>${esc(w)}</b>`).join(' · '):'<span style="opacity:.6">no words yet</span>'}
 // Leaderboard cards: race screen (right column on desktop, below the board on phones) and projector.
-function lbRow(s,i,reveal){return `<div class="lb${s.seat_id===ME?' me':''}">${medal(i)}${avatar(s)}<span class="nm">${esc(s.name)}${badge(s)}</span><span class="score">${reveal||S.state!=='lobby'?fmtN(s.score):''}</span><span class="best">${bestLine(s,reveal)}</span></div>`}
+const LB_REVEAL=new Set();
+document.addEventListener('click',e=>{const c=e.target.closest&&e.target.closest('.lb[data-sid]');if(!c||matchMedia('(hover:hover)').matches)return;const id=c.dataset.sid;LB_REVEAL.has(id)?LB_REVEAL.delete(id):LB_REVEAL.add(id);c.classList.toggle('reveal-name')});
+function lbRow(s,i,reveal){return `<div class="lb${s.seat_id===ME?' me':''}${LB_REVEAL.has(s.seat_id)?' reveal-name':''}" data-sid="${esc(s.seat_id)}">${medal(i)}${avatar(s)}<span class="nm">${esc(s.name)}${badge(s)}</span><span class="score">${reveal||S.state!=='lobby'?fmtN(s.score):''}</span><span class="best">${bestLine(s,reveal)}</span></div>`}
 // With 8+ seats the phone/desktop board shows top 5 + you pinned + a "show all" toggle; the projector shows everyone in two columns.
 let LB_OPEN=false;
 function lbCards(seats,reveal,full){if(seats.length<=8||full||LB_OPEN)return seats.map((s,i)=>lbRow(s,i,reveal)).join('');
