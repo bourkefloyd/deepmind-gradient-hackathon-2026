@@ -1,0 +1,400 @@
+[
+ {
+  "n": 1,
+  "theme": "Kitchen",
+  "board": "ggettnasolirpspt",
+  "seed_words": [
+   "egg",
+   "pot",
+   "plate"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 545,
+   "common_words": 158,
+   "common_3": 50,
+   "common_4": 55,
+   "common_5plus": 53,
+   "max_score": 420200,
+   "longest": "starting",
+   "human_target": 1900,
+   "seeds_present": [
+    "egg",
+    "pot",
+    "plate"
+   ]
+  }
+ },
+ {
+  "n": 2,
+  "theme": "Animals",
+  "board": "ntgnsaieltrdmaes",
+  "seed_words": [
+   "tiger",
+   "ant",
+   "rat",
+   "seal"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 638,
+   "common_words": 153,
+   "common_3": 45,
+   "common_4": 46,
+   "common_5plus": 62,
+   "max_score": 582200,
+   "longest": "material",
+   "human_target": 1800,
+   "seeds_present": [
+    "tiger",
+    "ant",
+    "rat",
+    "seal"
+   ]
+  }
+ },
+ {
+  "n": 3,
+  "theme": "Space",
+  "board": "stoounemnrasdelp",
+  "seed_words": [
+   "sun",
+   "moon",
+   "planet"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 492,
+   "common_words": 141,
+   "common_3": 49,
+   "common_4": 44,
+   "common_5plus": 48,
+   "max_score": 359000,
+   "longest": "tonsures",
+   "human_target": 1800,
+   "seeds_present": [
+    "sun",
+    "moon",
+    "planet"
+   ]
+  }
+ },
+ {
+  "n": 4,
+  "theme": "Beach",
+  "board": "ipecetahsretidas",
+  "seed_words": [
+   "pier",
+   "heat",
+   "sea"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 578,
+   "common_words": 165,
+   "common_3": 44,
+   "common_4": 55,
+   "common_5plus": 66,
+   "max_score": 516800,
+   "longest": "teachers",
+   "human_target": 1900,
+   "seeds_present": [
+    "pier",
+    "heat",
+    "sea"
+   ]
+  }
+ },
+ {
+  "n": 5,
+  "theme": "Music",
+  "board": "isgtrneatoomshps",
+  "seed_words": [
+   "sing",
+   "tempo",
+   "tone",
+   "horn"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 400,
+   "common_words": 129,
+   "common_3": 38,
+   "common_4": 47,
+   "common_5plus": 44,
+   "max_score": 261400,
+   "longest": "moorings",
+   "human_target": 1900,
+   "seeds_present": [
+    "sing",
+    "tempo",
+    "tone",
+    "horn"
+   ]
+  }
+ },
+ {
+  "n": 6,
+  "theme": "Sports",
+  "board": "shocdtspeiaenlvr",
+  "seed_words": [
+   "shot",
+   "dive",
+   "net"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 608,
+   "common_words": 169,
+   "common_3": 60,
+   "common_4": 61,
+   "common_5plus": 48,
+   "max_score": 460200,
+   "longest": "operated",
+   "human_target": 1800,
+   "seeds_present": [
+    "shot",
+    "dive",
+    "net"
+   ]
+  }
+ },
+ {
+  "n": 7,
+  "theme": "Garden",
+  "board": "eshptesolartbean",
+  "seed_words": [
+   "hose",
+   "tree",
+   "bean"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 542,
+   "common_words": 152,
+   "common_3": 38,
+   "common_4": 56,
+   "common_5plus": 58,
+   "max_score": 428600,
+   "longest": "stealers",
+   "human_target": 2000,
+   "seeds_present": [
+    "hose",
+    "tree",
+    "bean"
+   ]
+  }
+ },
+ {
+  "n": 8,
+  "theme": "Weather",
+  "board": "ptrwsaeshednicsu",
+  "seed_words": [
+   "heat",
+   "dew",
+   "ice",
+   "sun"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 528,
+   "common_words": 148,
+   "common_3": 49,
+   "common_4": 48,
+   "common_5plus": 51,
+   "max_score": 416700,
+   "longest": "chapters",
+   "human_target": 1800,
+   "seeds_present": [
+    "heat",
+    "dew",
+    "ice",
+    "sun"
+   ]
+  }
+ },
+ {
+  "n": 9,
+  "theme": "Colors",
+  "board": "srbpetalanicglkp",
+  "seed_words": [
+   "black",
+   "teal",
+   "pink"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 567,
+   "common_words": 158,
+   "common_3": 53,
+   "common_4": 57,
+   "common_5plus": 48,
+   "max_score": 466600,
+   "longest": "tracking",
+   "human_target": 1900,
+   "seeds_present": [
+    "black",
+    "teal",
+    "pink"
+   ]
+  }
+ },
+ {
+  "n": 10,
+  "theme": "Body",
+  "board": "slmrepaeinstksoe",
+  "seed_words": [
+   "palm",
+   "nose",
+   "toe",
+   "skin"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 568,
+   "common_words": 172,
+   "common_3": 56,
+   "common_4": 63,
+   "common_5plus": 53,
+   "max_score": 421300,
+   "longest": "spinster",
+   "human_target": 1900,
+   "seeds_present": [
+    "palm",
+    "nose",
+    "toe",
+    "skin"
+   ]
+  }
+ },
+ {
+  "n": 11,
+  "theme": "School",
+  "board": "clsnkaetsspredia",
+  "seed_words": [
+   "class",
+   "pen",
+   "desk"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 490,
+   "common_words": 145,
+   "common_3": 41,
+   "common_4": 52,
+   "common_5plus": 52,
+   "max_score": 430700,
+   "longest": "disaster",
+   "human_target": 1900,
+   "seeds_present": [
+    "class",
+    "pen",
+    "desk"
+   ]
+  }
+ },
+ {
+  "n": 12,
+  "theme": "City",
+  "board": "acsmferalotepans",
+  "seed_words": [
+   "cafe",
+   "lane",
+   "store"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 625,
+   "common_words": 168,
+   "common_3": 48,
+   "common_4": 55,
+   "common_5plus": 65,
+   "max_score": 514300,
+   "longest": "senators",
+   "human_target": 1900,
+   "seeds_present": [
+    "cafe",
+    "lane",
+    "store"
+   ]
+  }
+ },
+ {
+  "n": 13,
+  "theme": "Farm",
+  "board": "ilctsaosenradetg",
+  "seed_words": [
+   "corn",
+   "silo",
+   "gate"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 565,
+   "common_words": 141,
+   "common_3": 39,
+   "common_4": 52,
+   "common_5plus": 50,
+   "max_score": 467800,
+   "longest": "contrast",
+   "human_target": 1900,
+   "seeds_present": [
+    "corn",
+    "silo",
+    "gate"
+   ]
+  }
+ },
+ {
+  "n": 14,
+  "theme": "Ocean",
+  "board": "aefltredisenalat",
+  "seed_words": [
+   "eel",
+   "reef",
+   "sail"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 530,
+   "common_words": 152,
+   "common_3": 45,
+   "common_4": 56,
+   "common_5plus": 51,
+   "max_score": 429300,
+   "longest": "arsenate",
+   "human_target": 1900,
+   "seeds_present": [
+    "eel",
+    "reef",
+    "sail"
+   ]
+  }
+ },
+ {
+  "n": 15,
+  "theme": "Party",
+  "board": "rsrtedebinalwtsp",
+  "seed_words": [
+   "treat",
+   "band",
+   "wine"
+  ],
+  "notes": "",
+  "stats": {
+   "n_words": 619,
+   "common_words": 169,
+   "common_3": 51,
+   "common_4": 51,
+   "common_5plus": 67,
+   "max_score": 539600,
+   "longest": "rentable",
+   "human_target": 1800,
+   "seeds_present": [
+    "treat",
+    "band",
+    "wine"
+   ]
+  }
+ }
+]
