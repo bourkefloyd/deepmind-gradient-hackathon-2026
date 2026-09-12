@@ -21,10 +21,13 @@ body.spect{height:100vh;height:100dvh;overflow:hidden}
 .brand em{font-style:normal;color:var(--accent)}
 .brand .tag{color:var(--muted);font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap;display:block;margin-top:2px}
 .pills{display:flex;align-items:center;gap:8px}
+#topRoom{display:flex;align-items:center;gap:8px}
 .pill{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 11px;font-size:13px;color:var(--muted);white-space:nowrap;min-height:38px}
 .pill b{color:var(--ink);letter-spacing:2px;font-size:14px}
 .pill button{background:transparent;border:0;padding:0 0 0 2px;min-height:0;color:var(--muted);font-size:15px;line-height:1;cursor:pointer}
 .pill button:active{color:var(--ink)}
+a.pill.lab-link{color:var(--muted);text-decoration:none;font-weight:600}
+a.pill.lab-link:hover{color:var(--accent)}
 .live{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-weight:600}
 .live i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
 .live.on i{background:var(--accent);box-shadow:0 0 0 3px rgba(46,232,122,.2);animation:pulse 1.4s infinite}
@@ -374,10 +377,13 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 
 <header class="topbar">
   <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#052b14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></span><div><b>Word Hunt <em>VS</em></b><span class="tag">humans vs. models</span></div></div>
-  <div class="pills hidden" id="topRoom">
-    <div class="pill"><span class="lbl">room</span><b id="topCode"></b><button id="btnCopy" title="Copy join link" aria-label="Copy join link">⧉</button></div>
-    <div class="pill players">👥 <span id="topPlayers">0</span></div>
-    <div class="pill"><span class="live" id="topLive"><i></i><span>Lobby</span></span></div>
+  <div class="pills">
+    <a href="/lab" target="_blank" rel="noopener" class="pill lab-link">Lab (Deep Dive)</a>
+    <div class="hidden" id="topRoom">
+      <div class="pill"><span class="lbl">room</span><b id="topCode"></b><button id="btnCopy" title="Copy join link" aria-label="Copy join link">⧉</button></div>
+      <div class="pill players">👥 <span id="topPlayers">0</span></div>
+      <div class="pill"><span class="live" id="topLive"><i></i><span>Lobby</span></span></div>
+    </div>
   </div>
 </header>
 
@@ -414,7 +420,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   <div class="col">
     <div class="card"><div class="card-h"><span>Seats</span><span class="r" id="lobbyCount"></span></div><div class="seats" id="lobbySeats"></div>
       <div class="addseat" id="addSeat"><select id="seatSel"></select><button id="btnAddSeat">Add seat</button></div>
-      <div class="small" style="margin:10px 0 0">Projector view: <span id="lobbySpect" style="color:var(--ink)"></span></div>
+      <div class="small" style="margin:10px 0 0">Projector view: <span id="lobbySpect" style="color:var(--ink)"></span> · <a href="/lab" target="_blank" rel="noopener" class="lab-link" style="color:var(--muted)">Lab (Deep Dive)</a></div>
     </div>
     <button id="btnStart" class="primary big">Start</button>
     <div id="lobbyNotice" class="small hidden" style="color:var(--accent)"></div>
@@ -483,7 +489,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
     <div class="card"><div class="card-h"><span>🏆 Leaderboard</span><span class="r" id="resCount"></span></div><div class="rgrid" id="resSeats"></div><div class="rtable hidden" id="resTable"></div></div>
     <button id="btnRematch" class="primary big">↻ Rematch · same room, new board</button>
     <div id="resWait" class="small">Waiting for the host</div>
-    <div class="small"><a href="/" style="color:var(--muted)">Leave room</a></div>
+    <div class="small"><a href="/lab" target="_blank" rel="noopener" style="color:var(--muted)">Lab (Deep Dive)</a> · <a href="/" style="color:var(--muted)">Leave room</a></div>
   </div>
 </section>
 
@@ -499,6 +505,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
       <div class="theme" id="spThemeTitle"></div>
       <div class="boardcard" id="spBoardSlot" style="display:flex;justify-content:center"></div>
       <div class="small" id="spNote"></div>
+      <div class="small"><a href="/lab" target="_blank" rel="noopener" style="color:var(--muted)">Lab (Deep Dive)</a></div>
     </div>
     <div class="sp-right"><div class="side-title">🏆 Live leaderboard</div><div class="scores" id="spSeats"></div><div class="card bigcard hidden" id="spBigCard"><div class="card-h"><span>⚡ Recent Big Finds</span><span class="r">400+</span></div><div class="big" id="spBigFinds"></div></div><div class="side-title" id="spFeedTitle">💬 Game feed</div><div id="spTickerSlot" style="flex:1;min-height:0;display:flex"></div></div>
   </div>

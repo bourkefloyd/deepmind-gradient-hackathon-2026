@@ -17,6 +17,7 @@ from .solver import get_solver
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 INDEX = os.path.join(STATIC_DIR, "index.html")
+LAB = os.path.join(STATIC_DIR, "lab", "index.html")
 ROOM_TTL_S = 3 * 3600
 NAME_RE = re.compile(r"[^\w \-\.]+")
 CODE_RE = re.compile(r"^[A-Z0-9]{4}$")
@@ -112,6 +113,11 @@ async def build_info():
 @app.get("/")
 async def index():
     return FileResponse(INDEX)
+
+
+@app.get("/lab")
+async def lab_page():
+    return FileResponse(LAB)
 
 
 @app.get("/r/{code}")
