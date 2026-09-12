@@ -30,16 +30,18 @@ class SeatSpec:
 GEMMA_PROFILE = HandProfile(hz=10, lag=(0.15, 0.3), think=(0.6, 1.4), p_wrong=0.05, p_hesitate=0.04)
 # The nano hesitates and backs out on its own (abort actions), so the hand adds no wrong taps.
 # Between-word think time bounds its pace (PLAN: "speed is bounded"); WH_NANO_THINK="1.0,2.2" overrides.
-_think = tuple(float(x) for x in os.environ.get("WH_NANO_THINK", "4,6.5").split(","))
+_think = tuple(float(x) for x in os.environ.get("WH_NANO_THINK", "6,9").split(","))
 NANO_PROFILE = HandProfile(hz=float(os.environ.get("WH_NANO_HZ", 10)), lag=(0.15, 0.3), think=(_think[0], _think[-1]),
                            p_wrong=0.0, p_hesitate=float(os.environ.get("WH_NANO_HESITATE", 0.05)))
 
 
 def tuning() -> dict:
     """Live pace knobs, surfaced in /api/health so the deployed dial is visible."""
-    keys = ("WH_SEATS", "WH_NANO_THINK", "WH_NANO_TEMPERATURE", "WH_NANO_HESITATE", "WH_NANO_HZ",
+    keys = ("WH_SEATS", "NANO_CKPT", "WH_NANO_THINK", "WH_NANO_TEMPERATURE", "WH_NANO_HESITATE", "WH_NANO_HZ",
             "WH_REFLEX_A_THINK", "WH_REFLEX_B_THINK", "WH_REFLEX_HESITATE", "WH_REFLEX_WRONG")
-    return {k: os.environ.get(k, "(default)") for k in keys}
+    out = {k: os.environ.get(k, "(default)") for k in keys}
+    out["nano_ckpt_resolved"] = nano_seat.ckpt_name()
+    return out
 
 
 def default_lineup() -> list[str]:
@@ -58,7 +60,9 @@ def build_catalog() -> list[SeatSpec]:
     specs.append(SeatSpec("random", "Random", "random swiper",
                           lambda solver, rng: (RandomSwiperPolicy(rng), HandProfile(hz=10, think=(0.3, 0.8), p_wrong=0.0))))
 
-    specs.append(SeatSpec("nano", "Nano 10M", "10M params · $0 · ~2 ms",
+    lambda_ckpt = nano_seat.ckpt_name().startswith("d6_lambda")
+    specs.append(SeatSpec("nano", "Nano 11M · trained on Lambda A100" if lambda_ckpt else "Nano 11M",
+                          "11M params · $0 · ~2 ms" + (" · Lambda A100" if lambda_ckpt else " · CPU-trained fallback"),
                           lambda solver, rng: (nano_seat.NanoPolicy(rng=rng), NANO_PROFILE),
                           available=nano_seat.available(), default=True))
 

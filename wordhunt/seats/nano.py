@@ -13,11 +13,23 @@ import time
 
 from .base import ABORT, SUBMIT, Action, Policy
 
-DEFAULT_CKPT = os.path.join(os.path.dirname(__file__), "..", "..", "nano", "checkpoints", "d6_s0.pt")
+_CKPT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "nano", "checkpoints")
+# Default = the Lambda A100-trained hero (nano/README.md); the Mac-trained d6_s0 is the fallback.
+CKPT_CANDIDATES = [os.path.join(_CKPT_DIR, "d6_lambda.pt"), os.path.join(_CKPT_DIR, "d6_s0.pt")]
 
 
 def ckpt_path() -> str:
-    return os.environ.get("NANO_CKPT") or DEFAULT_CKPT
+    env = os.environ.get("NANO_CKPT")
+    if env:
+        return env
+    for p in CKPT_CANDIDATES:
+        if os.path.exists(p):
+            return p
+    return CKPT_CANDIDATES[0]
+
+
+def ckpt_name() -> str:
+    return os.path.splitext(os.path.basename(ckpt_path()))[0]
 
 
 def temperature() -> float:
@@ -81,4 +93,4 @@ class NanoPolicy(Policy):
         n = self.stats["actions"]
         return {"actions": n, "latency_ms": round(self.stats["ms"] / n, 2) if n else None,
                 "aborts": self.stats["aborts"], "submits": self.stats["submits"],
-                "tokens": 0, "cost_usd": 0.0, "params_M": round(self.seat.n_params / 1e6, 1)}
+                "tokens": 0, "cost_usd": 0.0, "params_M": round(self.seat.n_params / 1e6, 1), "ckpt": ckpt_name()}
