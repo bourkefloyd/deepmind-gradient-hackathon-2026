@@ -2,7 +2,8 @@
 # ported from actionfleet's Makefile (same model tag and flags).
 
 .PHONY: help setup setup-server words serve dev smoke docker-build docker-run \
-	check-mps data-smoke train-smoke rollout-smoke data train mlxvlm-up mlxvlm-down mlxvlm-stop mlxvlm-status gemma-seat
+	check-mps data-smoke train-smoke rollout-smoke data train mlxvlm-up mlxvlm-down mlxvlm-stop mlxvlm-status \
+	gemma-seat commentator-demo
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -158,6 +159,32 @@ mlxvlm-up: ## Start the mlx-vlm OpenAI-compatible server for Gemma 4 12B (Apple 
 		echo -e "  $(GREEN)mlx-vlm server is up (logs: /tmp/wordhunt-mlxvlm.log).$(RESET)"; \
 	fi
 	@echo -e "$(GREEN)Ready: OpenAI-compatible endpoint at $(MLXVLM_HOST)/v1 (Gemma 4 12B, vision intact).$(RESET)"
+
+# ---------------------------------------------------------------------------
+# Gemma commentator: spectate a Cloud Run room; Gemma 31B via Respan proxy -> Nango -> Discord
+#   make commentator-demo ROOM=AB12 SERVER=https://iter4e---wordhunt-pngitthrva-uw.a.run.app
+#   COMMENTATOR_ARGS="--rounds 1 -v" to exit after one recap (demo default in docs/demo-runbook.md)
+# ---------------------------------------------------------------------------
+GCP_PROJECT          ?= actionfleet-live
+RESPAN_MODEL         ?= deepinfra/google/gemma-4-31B-it
+NANGO_CONNECTION_ID  ?= 5ed2de56-09c0-4444-b53b-d4b74174078a
+COMMENTATOR_ARGS     ?=
+
+commentator-demo: ## Spectate ROOM on SERVER; Respan proxy (Gemma 31B) + Nango Discord recap
+	@if [ -z "$(ROOM)" ]; then echo -e "$(RED)Usage: make commentator-demo ROOM=CODE SERVER=https://...$(RESET)"; exit 1; fi
+	@if [ -z "$(SERVER)" ]; then echo -e "$(RED)SERVER is required (https://... Cloud Run URL)$(RESET)"; exit 1; fi
+	@if ! command -v gcloud >/dev/null 2>&1; then echo -e "$(RED)gcloud required to read Secret Manager keys$(RESET)"; exit 1; fi
+	@if ! $(PYTHON) -c "import websockets" >/dev/null 2>&1; then \
+		echo "  installing commentator deps into .venv..."; \
+		if command -v uv >/dev/null 2>&1; then uv pip install -q --python $(PYTHON) websockets; \
+		else $(PYTHON) -m pip install -q websockets; fi; \
+	fi
+	@echo -e "$(CYAN)Commentator -> room $(ROOM) on $(SERVER)$(RESET)  model=$(RESPAN_MODEL) via Respan proxy"
+	@RESPAN_API_KEY=$$(gcloud secrets versions access latest --secret respan-api-key --project $(GCP_PROJECT)) \
+	NANGO_SECRET_KEY=$$(gcloud secrets versions access latest --secret nango-secret-key --project $(GCP_PROJECT)) \
+	RESPAN_ENABLED=1 RESPAN_MODE=proxy RESPAN_MODEL=$(RESPAN_MODEL) RESPAN_ENV=mac-demo \
+	NANGO_CONNECTION_ID=$(NANGO_CONNECTION_ID) WH_PUBLIC_URL=$(SERVER) \
+	$(PYTHON) -m integrations.commentator --room "$(ROOM)" --server "$(SERVER)" --model "$(RESPAN_MODEL)" $(COMMENTATOR_ARGS)
 
 # ---------------------------------------------------------------------------
 # Gemma 12B seat: this Mac's mlx-vlm plays in a room (local or Cloud Run) over ws(s)
