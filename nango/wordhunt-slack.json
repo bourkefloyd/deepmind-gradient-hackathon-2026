@@ -1,0 +1,19 @@
+{
+  "integration_id": "slack",
+  "provider": "slack",
+  "end_user_id": "wordhunt-buzzer",
+  "runtime_mcp_url": "https://api.nango.dev/mcp",
+  "management_mcp_url": "https://mcp.nango.dev/mcp",
+  "actions": [
+    {
+      "name": "send-message",
+      "version": "3.0.1",
+      "input": ["channel_id", "text"]
+    },
+    {
+      "name": "list-channels",
+      "input": ["types", "cursor", "limit"]
+    }
+  ],
+  "notes": "Gemma should call Nango at the buzzer, not the Word Hunt server. Connection id and channel id are secrets after Slack is authorized. Discord needs a private OAuth app; Nango has no shared Discord credentials."
+}

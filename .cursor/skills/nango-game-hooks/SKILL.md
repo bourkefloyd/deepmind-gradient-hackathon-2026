@@ -29,6 +29,19 @@ Buzzer action templates:
 
 Optional later: Linear `create-issue` for E4B invalids (`"bug: CTA is not a word"`).
 
+## Current Nango environment (2026-09-12)
+
+Management MCP is attached to Cloud Agents as namespace `nango`. Slack is created with Nango-shared OAuth (`credential_source: "nango"`). Discord create with `credential_source: "nango"` failed: Nango does not ship shared Discord app credentials.
+
+| Item | Value |
+| --- | --- |
+| Slack integration id | `slack` |
+| Deployed actions | `send-message@3.0.1`, `list-channels` |
+| Connect end_user id | `wordhunt-buzzer` |
+| Discord | needs your own OAuth client id/secret |
+
+After the user authorizes Slack, `connections_list` with `end_user_id=wordhunt-buzzer` (or tag `purpose=wordhunt-buzzer`), then `actions_trigger` `list-channels` and a test `send-message`.
+
 ## Path A: Management MCP is attached
 
 Use `nango-management` tools. Typical sequence (Slack shown; swap `slack` → `discord` if that is the target):
