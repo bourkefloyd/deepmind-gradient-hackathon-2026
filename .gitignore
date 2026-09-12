@@ -1,2 +1,4 @@
 data/enable1.txt
 data/common-30k.txt
+__pycache__/
+*.pyc
