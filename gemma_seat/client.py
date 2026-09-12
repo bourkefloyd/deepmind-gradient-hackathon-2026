@@ -27,6 +27,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .boards import MIN_LEN, grid_rows, grid_text
 
+try:  # Respan gateway routing (integrations/respan.py); absent when gemma_seat is vendored alone
+    from integrations import respan as _respan
+except ImportError:  # pragma: no cover
+    _respan = None
+
 DEFAULT_BASE_URL = os.environ.get("MLXVLM_BASE_URL", "http://localhost:8080/v1")
 DEFAULT_MODEL = os.environ.get("MLXVLM_MODEL", "mlx-community/gemma-4-12B-it-4bit")
 # 448 px board: comfortably below the 560-token vision budget the GUI records
@@ -222,7 +227,12 @@ class GemmaSeatClient:
         max_words: int = 40,
         image_px: int = DEFAULT_IMAGE_PX,
         thinking: bool = False,
+        caller: str = "gemma-seat",
+        thread: str | None = None,
+        tags: dict | None = None,
     ):
+        """`caller`/`thread`/`tags` only matter with RESPAN_ENABLED=1: they become the span name,
+        customer id, thread id and custom properties of the trace (see integrations/respan.py)."""
         from openai import OpenAI
 
         self.model = model
@@ -232,9 +242,26 @@ class GemmaSeatClient:
         self.max_words = max_words
         self.image_px = image_px
         self.thinking = thinking
+        self.caller = caller
+        upstream_key = os.getenv("MLXVLM_API_KEY") or "mlx-vlm"
+        meta = {"modality_default": "text", "thinking": thinking, **(tags or {})}
+        if _respan is not None:
+            self.route = _respan.route(caller, base_url, upstream_key, model, thread=thread, metadata=meta)
+        else:  # pragma: no cover
+            self.route = None
+        if self.route is not None and self.route.via_respan:
+            base_url, upstream_key, self.model = self.route.base_url, self.route.api_key, self.route.model
+            self._extra_body = self.route.extra_body
+        else:
+            self._extra_body = {}
+        # RESPAN_MODE=log: direct call, then the finished call is shipped to Respan in a background thread.
+        self._log_mode = _respan is not None and _respan.log_mode()
+        self._thread_tag = thread
+        self._tags = meta
+        self.base_url = base_url
         self._client = OpenAI(
             base_url=base_url,
-            api_key=os.getenv("MLXVLM_API_KEY") or "mlx-vlm",
+            api_key=upstream_key,
             timeout=timeout_s,
             max_retries=0,
         )
@@ -283,8 +310,12 @@ class GemmaSeatClient:
             # 'repetition loops' failure of nanoagent record 0025); the penalties
             # break the loop, and the stream reader below cuts it off if not.
             "presence_penalty": 0.8,
-            "extra_body": {"enable_thinking": self.thinking, "repetition_penalty": 1.15},
+            "extra_body": {"enable_thinking": self.thinking, "repetition_penalty": 1.15, **self._extra_body},
         }
+        if self._extra_body:
+            # Per-request tag so a whole race groups under one thread and each call says what it asked for.
+            kwargs["extra_body"]["metadata"] = {**self._extra_body.get("metadata", {}), "modality": modality,
+                                                 "board": board.upper(), "exclude_n": str(len(exclude or []))}
         if not self.thinking:
             kwargs["reasoning_effort"] = "none"
         return kwargs
@@ -331,7 +362,8 @@ class GemmaSeatClient:
         state: dict | None = None,
         exclude: list[str] | None = None,
     ) -> Iterator[str]:
-        deadline = time.perf_counter() + (deadline_s if deadline_s is not None else self.timeout_s)
+        t_start = time.perf_counter()
+        deadline = t_start + (deadline_s if deadline_s is not None else self.timeout_s)
         seen: set[str] = set()
         seen_candidates: set[str] = set()
         buf = ""
@@ -383,6 +415,24 @@ class GemmaSeatClient:
         if state is not None:
             state["raw"] = raw
             state["candidates"] = candidates
+        if self._log_mode:
+            self._log_to_respan(board, modality, exclude, raw, time.perf_counter() - t_start,
+                                state["error"] if state is not None else None)
+
+    def _log_to_respan(self, board: str, modality: str, exclude: list[str] | None, raw: str, latency_s: float, error: str | None) -> None:
+        import threading
+
+        def _send() -> None:
+            self.last_log = _respan.log_request(
+                self.caller, model=self.model, messages=self._messages(board, modality, exclude) if modality != "image" else
+                [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": f"<{self.image_px}px board PNG> " + IMAGE_USER_PROMPT.format(max_words=self.max_words)}],
+                completion=raw, latency_s=latency_s, thread=self._thread_tag, upstream_base_url=self.base_url,
+                metadata={**self._tags, "modality": modality, "board": board.upper(), "exclude_n": len(exclude or [])},
+                status_code=200 if error is None else 500, error=error or "")
+
+        threading.Thread(target=_send, name="respan-log", daemon=True).start()
+
+    last_log: dict | None = None
 
 
 if __name__ == "__main__":

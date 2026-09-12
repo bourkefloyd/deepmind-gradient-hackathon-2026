@@ -18,6 +18,11 @@ import urllib.request
 from .base import WordQueuePolicy
 from ..solver import best_effort_path, path_for_word
 
+try:  # integrations/ is copied into the image next to wordhunt/; optional in stripped checkouts
+    from integrations import respan as _respan
+except ImportError:  # pragma: no cover
+    _respan = None
+
 WORD_RE = re.compile(r"[A-Za-z]{3,8}")
 
 PROMPT = """You are playing Word Hunt on a 4x4 letter board.
@@ -49,13 +54,23 @@ class GemmaPolicy(WordQueuePolicy):
         self._bad: list[str] = []
         self._found: list[str] = []
         self._task: asyncio.Task | None = None
+        self._round = 0
         self.stats = {"calls": 0, "errors": 0, "latency_ms": [], "prompt_tokens": 0, "completion_tokens": 0,
                       "words_claimed": 0, "words_traceable": 0}
+
+    def _route(self, board: str):
+        """Respan gateway when RESPAN_ENABLED=1 (tagged gemma-seat / where=server), else direct."""
+        if _respan is None:
+            return None
+        return _respan.route("gemma-seat", self.base_url, self.api_key, self.model, thread=f"server-{board.upper()}",
+                             metadata={"where": "server", "board": board.upper(), "round": self._round,
+                                       "words_per_call": self.words_per_call})
 
     # ---- lifecycle --------------------------------------------------------------------------
     async def start_round(self, board: str, words: dict[str, list[int]]) -> None:
         await super().start_round(board, words)
         self._queue, self._seen, self._bad, self._found = [], set(), [], []
+        self._round += 1
         self.stats = {k: ([] if k == "latency_ms" else 0) for k in self.stats}
         self._task = asyncio.create_task(self._loop(board))
 
@@ -118,8 +133,13 @@ class GemmaPolicy(WordQueuePolicy):
             "max_tokens": self.max_tokens,
             "chat_template_kwargs": {"enable_thinking": self.thinking},
         }
-        req = urllib.request.Request(self.base_url + "/chat/completions", data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json", **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})})
+        url = self.base_url + "/chat/completions"
+        headers = {"Content-Type": "application/json", **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})}
+        r = self._route(board)
+        if r is not None and r.via_respan:
+            body = {**body, "model": r.model, **r.body_extra}
+            url, headers = r.completions_url(), r.auth_headers()
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers)
         t0 = time.time()
         self.stats["calls"] += 1
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -129,7 +149,16 @@ class GemmaPolicy(WordQueuePolicy):
         self.stats["prompt_tokens"] += usage.get("prompt_tokens", 0)
         self.stats["completion_tokens"] += usage.get("completion_tokens", 0)
         msg = data["choices"][0]["message"]
-        return msg.get("content") or ""
+        content = msg.get("content") or ""
+        if _respan is not None and _respan.log_mode():
+            import threading
+            threading.Thread(target=_respan.log_request, kwargs=dict(
+                caller="gemma-seat", model=self.model, messages=body["messages"], completion=content,
+                latency_s=self.stats["latency_ms"][-1] / 1000, usage=usage, thread=f"server-{board.upper()}",
+                upstream_base_url=self.base_url, timeout_s=5.0,
+                metadata={"where": "server", "board": board.upper(), "round": self._round, "words_per_call": self.words_per_call}),
+                name="respan-log", daemon=True).start()
+        return content
 
     def public_stats(self) -> dict:
         lat = self.stats["latency_ms"]

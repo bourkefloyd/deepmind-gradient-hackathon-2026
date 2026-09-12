@@ -35,6 +35,9 @@ def run(args: argparse.Namespace) -> dict:
         max_tokens=args.max_tokens,
         temperature=args.temperature,
         thinking=args.thinking,
+        caller="nano-vs-gemma-eval",
+        thread=f"seed{args.seed}-n{args.n}-{args.modality}",
+        tags={"where": "eval", "seed": args.seed, "n_boards": args.n},
     )
     suffix = "+think" if args.thinking else ""
 

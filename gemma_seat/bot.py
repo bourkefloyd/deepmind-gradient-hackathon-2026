@@ -350,6 +350,9 @@ def _client(args: argparse.Namespace):
         max_words=args.max_words,
         max_tokens=args.max_tokens,
         thinking=args.thinking,
+        caller="gemma-seat",
+        thread=getattr(args, "room", None) or None,
+        tags={"where": "mac-bot", "modality_default": getattr(args, "modality", "text")},
     )
 
 

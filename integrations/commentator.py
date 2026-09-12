@@ -14,7 +14,8 @@ the model's text. Otherwise the templated recap is posted so Discord never goes 
 
 Env: GEMMA_BASE_URL (default http://localhost:8080/v1), GEMMA_MODEL
 (default mlx-community/gemma-4-12B-it-4bit), GEMMA_API_KEY (optional), plus the Nango vars
-from config.py. Thinking is off: `reasoning_effort: "none"` and `enable_thinking: false`
+from config.py. RESPAN_ENABLED=1 + RESPAN_API_KEY routes the call through the Respan gateway
+tagged `commentator` (integrations/respan.py). Thinking is off: `reasoning_effort: "none"` and `enable_thinking: false`
 (the same two knobs gemma_seat/client.py uses for mlx-vlm).
 """
 from __future__ import annotations
@@ -31,7 +32,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import config, discord, formatters, handlers, tools
+from . import config, discord, formatters, handlers, respan, tools
 
 log = logging.getLogger("integrations.commentator")
 
@@ -113,15 +114,36 @@ def build_request(payload: dict[str, Any], model: str, max_tokens: int = 300) ->
     }
 
 
-def _chat(base_url: str, body: dict[str, Any], timeout_s: float, api_key: str = "") -> dict[str, Any]:
+def _chat(base_url: str, body: dict[str, Any], timeout_s: float, api_key: str = "",
+          room: str = "", round_no: Any = None) -> dict[str, Any]:
+    # RESPAN_ENABLED=1: the call goes to the Respan gateway tagged `commentator` (thread = room),
+    # with the Gemma model name and a credential_override to GEMMA_BASE_URL. Otherwise straight to Gemma.
+    r = respan.route("commentator", base_url, api_key, body["model"], thread=room or None,
+                     metadata={"where": "commentator", "room": room or None, "round": round_no, "tool": "send_discord_recap"})
+    if r.via_respan:
+        body = {**body, "model": r.model, **r.body_extra}
+        log.info("routing via %s", r.describe())
     req = urllib.request.Request(
-        base_url.rstrip("/") + "/chat/completions",
+        r.completions_url(),
         data=json.dumps(body).encode(),
         method="POST",
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key or 'none'}"},
+        headers={**r.auth_headers(), **({} if r.api_key else {"Authorization": "Bearer none"})},
     )
+    t0 = time.perf_counter()
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-        return json.loads(resp.read())
+        data = json.loads(resp.read())
+    if respan.log_mode():
+        # Direct call done; ship it to Respan as a span (tool call rendered as text so the trace shows what Gemma said).
+        msg = ((data.get("choices") or [{}])[0].get("message") or {})
+        out = msg.get("content") or "".join(json.dumps(tc.get("function", {})) for tc in msg.get("tool_calls") or [])
+        res = respan.log_request("commentator", model=body["model"], messages=body["messages"], completion=out or "",
+                                 latency_s=time.perf_counter() - t0, usage=data.get("usage"), thread=room or None,
+                                 upstream_base_url=base_url, timeout_s=5.0,
+                                 metadata={"where": "commentator", "room": room or None, "round": round_no, "tool": "send_discord_recap",
+                                           "tool_called": bool(msg.get("tool_calls"))})
+        log.info("respan log: ok=%s status=%s unique_id=%s", res["ok"], res["status"],
+                 res["body"].get("unique_id") if isinstance(res["body"], dict) else "-")
+    return data
 
 
 def extract_tool_call(resp: dict[str, Any]) -> dict[str, Any] | None:
@@ -145,7 +167,8 @@ async def commentate(payload: dict[str, Any], base_url: str = DEFAULT_BASE_URL, 
     resp: dict[str, Any] = {}
     error = ""
     try:
-        resp = await asyncio.wait_for(asyncio.to_thread(_chat, base_url, body, deadline_s, api_key or os.environ.get("GEMMA_API_KEY", "")),
+        resp = await asyncio.wait_for(asyncio.to_thread(_chat, base_url, body, deadline_s, api_key or os.environ.get("GEMMA_API_KEY", ""),
+                                                        str(payload.get("code") or ""), payload.get("round")),
                                       timeout=deadline_s + 0.5)
     except asyncio.TimeoutError:
         error = f"model did not answer within {deadline_s:.0f}s"

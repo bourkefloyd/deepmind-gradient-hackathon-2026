@@ -56,6 +56,8 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudb
 #   WH_SEATS (default lineup, e.g. "nano,reflex-a"), WH_NANO_TEMPERATURE, WH_NANO_THINK
 #   Discord via Nango: on by default when Secret Manager `nango-secret-key` exists (mounted as NANGO_SECRET_KEY,
 #   WH_INTEGRATIONS=1, WH_PUBLIC_URL=<service url>); WH_INTEGRATIONS=0 disables. NANGO_CONNECTION_ID etc. pass through.
+#   Respan gateway: on by default when Secret Manager `respan-api-key` exists (mounted as RESPAN_API_KEY,
+#   RESPAN_ENABLED=1, RESPAN_ENV=cloud-run); RESPAN_ENABLED=0 disables. RESPAN_BASE_URL / RESPAN_MODEL pass through.
 # Room persistence bucket (rooms survive deploys); WH_ROOM_STORE overrides, e.g. gs://bucket/prefix or file:/dir.
 ROOM_STORE="${WH_ROOM_STORE:-gs://$PROJECT-wordhunt-rooms}"
 ENV_VARS="WH_BUILD=$BUILD_LABEL|WH_ROOM_STORE=$ROOM_STORE"
@@ -65,13 +67,15 @@ if [[ "$ROOM_STORE" == gs://* ]]; then
     gcloud storage buckets create "gs://$BUCKET" --location="$REGION" --uniform-bucket-level-access --quiet || echo "warn: could not create room bucket gs://$BUCKET"
 fi
 for v in GEMMA_BASE_URL GEMMA_API_KEY GEMMA_MODELS GEMMA_SEATS NANO_CKPT WH_NANO_TEMPERATURE WH_NANO_THINK WH_SEATS WH_MAX_HUMANS WH_INTEGRATIONS \
-         NANGO_CONNECTION_ID NANGO_DISCORD_INTEGRATION_ID NANGO_PROVIDER_CONFIG_KEY NANGO_DISCORD_RECAP_ACTION NANGO_BASE_URL DISCORD_CHANNEL_ID WH_INTEGRATIONS_TIMEOUT_S; do
+         NANGO_CONNECTION_ID NANGO_DISCORD_INTEGRATION_ID NANGO_PROVIDER_CONFIG_KEY NANGO_DISCORD_RECAP_ACTION NANGO_BASE_URL DISCORD_CHANNEL_ID WH_INTEGRATIONS_TIMEOUT_S \
+         RESPAN_ENABLED RESPAN_BASE_URL RESPAN_MODEL RESPAN_CREDENTIAL_OVERRIDE; do
   if [[ -n "${!v:-}" ]]; then ENV_VARS="$ENV_VARS|$v=${!v}"; fi
 done
 EXISTING_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)' 2>/dev/null || true)"
 # Discord/Nango integration is on by default when the Secret Manager secret exists; WH_INTEGRATIONS=0 disables.
 SECRET_NAME="${NANGO_SECRET_NAME:-nango-secret-key}"
 SECRET_FLAGS=()
+SECRETS=""   # comma list for one --update-secrets flag (repeating the flag would replace, not merge)
 if [[ "${WH_INTEGRATIONS:-1}" == "1" ]]; then
   if gcloud secrets versions access latest --secret "$SECRET_NAME" >/dev/null 2>&1; then
     [[ "$ENV_VARS" == *"|WH_INTEGRATIONS="* ]] || ENV_VARS="$ENV_VARS|WH_INTEGRATIONS=1"
@@ -79,11 +83,23 @@ if [[ "${WH_INTEGRATIONS:-1}" == "1" ]]; then
     # (https://<tag>---wordhunt-<hash>-uw.a.run.app), which stays valid after a promote.
     TAG_URL_GUESS="${EXISTING_URL/https:\/\//https:\/\/$TAG---}"
     ENV_VARS="$ENV_VARS|WH_PUBLIC_URL=${WH_PUBLIC_URL:-${TAG_URL_GUESS:-$EXISTING_URL}}"
-    SECRET_FLAGS=(--update-secrets "NANGO_SECRET_KEY=$SECRET_NAME:latest")
+    SECRETS="NANGO_SECRET_KEY=$SECRET_NAME:latest"
   else
     echo "warn: secret $SECRET_NAME not found (or no access); deploying without Discord integration"
   fi
 fi
+# Respan gateway (Gemma call tracing) is on by default when the `respan-api-key` secret exists; RESPAN_ENABLED=0 disables.
+RESPAN_SECRET_NAME="${RESPAN_SECRET_NAME:-respan-api-key}"
+if [[ "${RESPAN_ENABLED:-1}" == "1" ]]; then
+  if gcloud secrets versions access latest --secret "$RESPAN_SECRET_NAME" >/dev/null 2>&1; then
+    [[ "$ENV_VARS" == *"|RESPAN_ENABLED="* ]] || ENV_VARS="$ENV_VARS|RESPAN_ENABLED=1"
+    ENV_VARS="$ENV_VARS|RESPAN_ENV=cloud-run"
+    SECRETS="${SECRETS:+$SECRETS,}RESPAN_API_KEY=$RESPAN_SECRET_NAME:latest"
+  else
+    echo "warn: secret $RESPAN_SECRET_NAME not found (or no access); deploying without Respan tracing"
+  fi
+fi
+if [[ -n "$SECRETS" ]]; then SECRET_FLAGS=(--update-secrets "$SECRETS"); fi
 
 SOURCE_FLAGS=(--source .)
 if [[ "$DEPLOY_MODE" == "image" ]]; then

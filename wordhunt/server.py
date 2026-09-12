@@ -71,6 +71,14 @@ async def rehydrate_rooms() -> None:
         __import__("logging").getLogger("wordhunt.server").info("rehydrated %d rooms from %s", len(rooms), room_store().url)
 
 
+def _respan_status() -> dict:
+    try:
+        from integrations import respan
+        return respan.status()
+    except Exception:  # noqa: BLE001 - health must never fail on an optional module
+        return {"enabled": False}
+
+
 @app.get("/api/health")
 async def healthz():
     s = get_solver()
@@ -79,7 +87,7 @@ async def healthz():
     return {"ok": True, "words": len(s.words), "build": BUILD, "rooms": len(rooms), "tuning": registry.tuning(),
             "uptime_s": int(now - STARTED_AT), "instance_id": INSTANCE_ID,
             "store": {"url": room_store().url, **room_store().stats},
-            "lineup": [x.id for x in registry.lineup()],
+            "lineup": [x.id for x in registry.lineup()], "respan": _respan_status(),
             "room_list": [{"code": r.code, "state": r.state, "round": r.round_no, "humans": r.humans_connected,
                            "seats": len(r.seats), "age_s": int(now - r.created_at)} for r in rooms.values()]}
 
