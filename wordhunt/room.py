@@ -132,7 +132,7 @@ class Room:
             if self.n_humans >= MAX_HUMANS:
                 return None
             seat = Seat(player_id, name, "human", self._color())
-            seat.queued = self.state == "playing"
+            seat.queued = self._late_for_this_round()
             self.seats[player_id] = seat
         if name:
             seat.name = name
@@ -140,6 +140,13 @@ class Room:
         if self.host_id is None or not self._host_connected():
             self.host_id = player_id
         return seat
+
+    def _late_for_this_round(self) -> bool:
+        """Joining in lobby/countdown/results, or within the first HOTJOIN_S of a race, plays now."""
+        if self.state != "playing":
+            return False
+        elapsed = RACE_S - (self.phase_ends_at - self.now())
+        return elapsed > HOTJOIN_S
 
     def _host_connected(self) -> bool:
         h = self.seats.get(self.host_id or "")
