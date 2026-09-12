@@ -18,6 +18,7 @@ from .solver import Solver
 
 COUNTDOWN_S = float(os.environ.get("WH_COUNTDOWN_S", 20.0))
 RACE_S = float(os.environ.get("WH_RACE_S", 75.0))
+HOTJOIN_S = float(os.environ.get("WH_HOTJOIN_S", 15.0))   # joiners inside this window play the current race
 INTEGRATIONS = os.environ.get("WH_INTEGRATIONS") == "1"
 TICKER_MAX = 60
 MAX_HUMANS = int(os.environ.get("WH_MAX_HUMANS", 24))
