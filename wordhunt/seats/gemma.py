@@ -59,10 +59,10 @@ class GemmaPolicy(WordQueuePolicy):
                       "words_claimed": 0, "words_traceable": 0}
 
     def _route(self, board: str):
-        """Respan gateway when RESPAN_ENABLED=1 (tagged gemma-seat / where=server), else direct."""
+        """Respan gateway when RESPAN_ENABLED=1 (tagged gemma-12b-lambda / where=server), else direct."""
         if _respan is None:
             return None
-        return _respan.route("gemma-seat", self.base_url, self.api_key, self.model, thread=f"server-{board.upper()}",
+        return _respan.route("gemma-12b-lambda", self.base_url, self.api_key, self.model, thread=f"server-{board.upper()}",
                              metadata={"where": "server", "board": board.upper(), "round": self._round,
                                        "words_per_call": self.words_per_call})
 
@@ -153,7 +153,7 @@ class GemmaPolicy(WordQueuePolicy):
         if _respan is not None and _respan.log_mode():
             import threading
             threading.Thread(target=_respan.log_request, kwargs=dict(
-                caller="gemma-seat", model=self.model, messages=body["messages"], completion=content,
+                caller="gemma-12b-lambda", model=self.model, messages=body["messages"], completion=content,
                 latency_s=self.stats["latency_ms"][-1] / 1000, usage=usage, thread=f"server-{board.upper()}",
                 upstream_base_url=self.base_url, timeout_s=5.0,
                 metadata={"where": "server", "board": board.upper(), "round": self._round, "words_per_call": self.words_per_call}),
