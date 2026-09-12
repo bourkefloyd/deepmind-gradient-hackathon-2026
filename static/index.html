@@ -552,7 +552,7 @@ function renderSpSeats(){const reveal=S.state==='results';const seats=[...S.seat
 function renderSpect(prev,changed){show('spect');const st=S.state;$('spCode').textContent=S.code;const join=location.origin+'/r/'+S.code;$('spJoin').textContent=join.replace(/^https?:\/\//,'');$('spQr').src=QR(join,400);const l=$('spLive');l.classList.toggle('on',st==='playing');l.lastElementChild.textContent=LIVE[st]||'';
   const slot=$('spBoardSlot');if(!slot.contains($('boardwrap'))){slot.appendChild($('boardwrap'));$('spTickerSlot').appendChild($('ticker'))}
   const showBoard=st==='playing'||st==='results';$('boardwrap').classList.toggle('hidden',!showBoard);slot.classList.toggle('hidden',!showBoard);$('ticker').classList.toggle('hidden',!showBoard);$('spFeedTitle').classList.toggle('hidden',!showBoard);
-  $('spStats').classList.toggle('hidden',st!=='playing');$('spBig').classList.toggle('hidden',st==='playing');$('spPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';$('spRoundN').textContent=S.round;
+  $('spStats').classList.toggle('hidden',st!=='playing');$('spBig').classList.toggle('hidden',st==='playing');$('spPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';$('spRoundN').textContent=S.round;$('spThemeTitle').textContent=(st==='playing'||st==='results')?levelTitle():'';
   if(st!=='playing'&&st!=='results')$('spBigCard').classList.add('hidden');
   if(st==='lobby'){$('spBig').textContent='Waiting';$('spBig').classList.remove('low');$('spNote').textContent='Scan to join. The host presses Start.'}
   else if(st==='countdown'){$('spBig').textContent=Math.ceil(Math.max(0,S.phase_ends_at-now()));$('spBig').classList.remove('low');$('spNote').textContent='Round '+S.round+' starts in'}
