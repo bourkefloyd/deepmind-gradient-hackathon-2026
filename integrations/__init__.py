@@ -8,6 +8,7 @@ Layout:
     events.py      async fire-and-forget dispatcher: emit(event_type, payload)
     handlers.py    event -> formatter -> discord wiring; register() installs the v1 handlers
     tools.py       OpenAI tool schema so a Gemma commentator can call send-discord-recap
+    commentator.py the buzzer call: one Gemma chat call with the tool, spectator client for the game
     demo.py        python -m integrations.demo [--live] [--connections]
 
 The game only touches `integrations.events.emit`; everything else is replaceable.

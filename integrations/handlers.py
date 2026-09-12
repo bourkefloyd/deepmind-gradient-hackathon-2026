@@ -50,6 +50,39 @@ def from_room(room: Any) -> dict[str, Any]:
     return p
 
 
+def from_snapshot(snap: dict[str, Any], public_url: str = "") -> dict[str, Any]:
+    """Same payload as from_room, built from a `state` WebSocket message in the `results` phase
+    (seats carry `words` only then). Used by the client-side commentator."""
+    s = settings()
+    code = snap.get("code", "")
+    ticker = snap.get("ticker", [])
+    seats = []
+    for seat in snap.get("seats", []):
+        words = [list(kv) for kv in seat.get("words", [])]
+        words.sort(key=lambda kv: (-int(kv[1]), kv[0]))
+        sid = seat.get("seat_id")
+        invalid = sum(1 for t in ticker if t.get("seat_id") == sid and not t.get("ok") and t.get("reason") == "miss")
+        d = {
+            "name": seat.get("name", "?"), "kind": seat.get("kind", ""), "label": seat.get("label", ""),
+            "score": int(seat.get("score", 0)), "n_words": int(seat.get("n_words", len(words))),
+            "words": words[:12], "invalid": invalid,
+        }
+        if words:
+            d["best_word"], d["best_pts"] = words[0][0], int(words[0][1])
+        seats.append(d)
+    url = (public_url.rstrip("/") + f"/r/{code}") if public_url else s.room_url(code)
+    p: dict[str, Any] = {
+        "code": code, "round": snap.get("round", 0), "url": url, "seats": seats,
+        "countdown_s": snap.get("countdown_s", 20), "race_s": snap.get("race_s", 75),
+    }
+    if snap.get("results"):
+        r0 = snap["results"][0]
+        p["board_best"] = r0.get("best_words", [])
+        p["max_score"] = r0.get("max_score")
+        p["n_board_words"] = r0.get("n_board_words")
+    return p
+
+
 def _module_const(obj: Any, name: str, default: float) -> float:
     import sys
     mod = sys.modules.get(type(obj).__module__)

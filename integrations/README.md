@@ -106,17 +106,31 @@ with `connection.metadata.botToken`.
 ## Gemma commentator (the buzzer call)
 
 `tools.py` exposes exactly one OpenAI tool, `send_discord_recap(text)`, mapped 1:1 to the
-Nango action. Flow at `round_ended`:
+Nango action. `commentator.py` makes ONE chat call with that tool (thinking off:
+`reasoning_effort: "none"` + `enable_thinking: false`), logs the raw tool call
+(`MODEL CALLED NANGO TOOL …` — that line is the on-screen proof), executes it through
+`tools.dispatch()` → `POST /action/trigger`, and posts the templated recap instead if the model
+does not call the tool within 10 s (`GEMMA_TOOL_DEADLINE_S`) or answers with plain text.
 
-```python
-from integrations import tools, handlers
-payload = handlers.from_room(room)
-resp = openai_client.chat.completions.create(model=GEMMA, messages=tools.commentator_messages(payload),
-                                             tools=tools.TOOLS, tool_choice="auto")
-await tools.dispatch(resp.choices[0].message.tool_calls)   # -> POST /action/trigger
+Gemma runs on the Mac (mlx-vlm, `http://localhost:8080/v1`, `mlx-community/gemma-4-12B-it-4bit`)
+and Cloud Run cannot reach it, so the commentator runs **client side**: it joins the room as a
+spectator over wss (`{"type":"hello","role":"spectator"}`), waits for a `state` message with
+`state == "results"`, rebuilds the payload with `handlers.from_snapshot`, and fires.
+
 ```
-vLLM needs `--tool-call-parser gemma4 --enable-auto-tool-choice` (PLAN.md section 4). Nothing
-in `tools.py` posts unless the model emits the tool call.
+# on the Mac, with NANGO_SECRET_KEY + NANGO_CONNECTION_ID exported and mlx-vlm up
+python -m integrations.commentator --room ABCD --server https://wordhunt-pngitthrva-uw.a.run.app
+python -m integrations.commentator --once                # one call on the demo payload, no game
+python -m integrations.commentator --once --base-url http://127.0.0.1:8811/v1 --model mock   # against a mock
+```
+Env: `GEMMA_BASE_URL`, `GEMMA_MODEL`, `GEMMA_API_KEY` (optional), `GEMMA_TOOL_DEADLINE_S`.
+Needs `websockets` for the spectator path (`gemma_seat/requirements.txt` has it). vLLM seats need
+`--tool-call-parser gemma4 --enable-auto-tool-choice` (PLAN.md section 4). Nothing posts on the
+model's behalf except the explicit fallback, which is logged as `posted templated recap instead`.
+
+Note: with `WH_INTEGRATIONS=1` on the server, `round_ended` also posts the templated leaderboard
+server-side, so during a commentated match Discord gets the leaderboard (server) and the
+trash talk (Gemma via the tool). Set `WH_INTEGRATIONS=0` if only the model should speak.
 
 ## v2: room threads (not wired)
 
