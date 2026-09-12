@@ -47,16 +47,40 @@
    "longest": "tours"
   },
   {
-   "seat": "**nano d6_s0** (17k steps, 200k boards)",
+   "seat": "nano d6_s0 (Mac MPS, 17k steps x 256, 200k boards, 30 min)",
    "score": 11245.0,
    "valid_rate": 0.9584748961872405,
    "mean_len": 3.4433374148033358,
    "wpm": 36.12,
    "cost": "$0",
-   "latency": "2.7 ms / action",
+   "latency": "1.7 ms / action",
    "params": "11.0M",
-   "note": "the hero seat",
+   "note": "first hero; kept as fallback",
    "longest": "listen"
+  },
+  {
+   "seat": "**nano d6_lambda** (Lambda A100, 16.3k steps x 1024, 1M boards, len-bonus 1.6, 33 min)",
+   "score": 16550.0,
+   "valid_rate": 0.9862018881626725,
+   "mean_len": 3.6690110514936527,
+   "wpm": 39.4,
+   "cost": "$0",
+   "latency": "1.8 ms / action",
+   "params": "11.0M",
+   "note": "the hero seat (default)",
+   "longest": "panties"
+  },
+  {
+   "seat": "nano d8 A100 len-bonus 1.6 (not shipped)",
+   "score": 16730.0,
+   "valid_rate": 0.980110497237569,
+   "mean_len": 3.678083547027724,
+   "wpm": 39.72,
+   "cost": "$0",
+   "latency": "3.6 ms / action",
+   "params": "25.8M",
+   "note": "25.8M twin of the hero: same score, 2x CPU cost",
+   "longest": "panties"
   },
   {
    "seat": "Gemma 4 12B, text grid",

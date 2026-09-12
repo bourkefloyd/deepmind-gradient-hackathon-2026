@@ -1,7 +1,7 @@
 """Live learning between rounds (PLAN.md section 3, "Live learning"): validated words from any seat -> soft-target
 samples -> a few BC steps on CPU mixed 1:1 with replay -> fixed held-out check -> keep or roll back.
 
-  learner = OnlineLearner("nano/checkpoints/d6_s0.pt")
+  learner = OnlineLearner("nano/checkpoints/d6_lambda.pt")
   res = learner.update(board, ["hunt", "sent", "lantern"])   # {kept, held_out_before, held_out_after, seconds, ...}
   learner.seat / learner.model  -> the current (kept) weights; learner.save(path)
 
@@ -292,7 +292,7 @@ def simulate(checkpoint: str, rounds: int, out: Optional[str], teacher_top: int 
 
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--checkpoint", default="nano/checkpoints/d6_s0.pt")
+    ap.add_argument("--checkpoint", default="nano/checkpoints/d6_lambda.pt")
     ap.add_argument("--rounds", type=int, default=10)
     ap.add_argument("--teacher-top", type=int, default=15)
     ap.add_argument("--teacher-min-len", type=int, default=4)

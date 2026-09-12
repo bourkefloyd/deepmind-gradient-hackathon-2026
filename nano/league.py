@@ -96,7 +96,11 @@ def main(argv: list[str] | None = None) -> int:
     d6 = "nano/checkpoints/d6_s0.pt"
     m6, _ = NanoAgent.load(d6)
     sp6 = bench(d6, n=200)["ms_per_action"]
-    played("**nano d6_s0** (17k steps, 200k boards)", StudentPolicy(m6, device, a.temperature, a.seed), f"{m6.n_params() / 1e6:.1f}M", f"{sp6:.1f} ms / action", "the hero seat")
+    played("nano d6_s0 (Mac MPS, 17k steps x 256, 200k boards, 30 min)", StudentPolicy(m6, device, a.temperature, a.seed), f"{m6.n_params() / 1e6:.1f}M", f"{sp6:.1f} ms / action", "first hero; kept as fallback")
+    dl = "nano/checkpoints/d6_lambda.pt"
+    ml, _ = NanoAgent.load(dl)
+    spl = bench(dl, n=200)["ms_per_action"]
+    played("**nano d6_lambda** (Lambda A100, 16.3k steps x 1024, 1M boards, len-bonus 1.6, 33 min)", StudentPolicy(ml, device, a.temperature, a.seed), f"{ml.n_params() / 1e6:.1f}M", f"{spl:.1f} ms / action", "the hero seat (default)")
 
     for spec in a.extra:
         name, path, *note = spec.split("=")
@@ -132,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
     if extra:
         md += ["", "Gemma variants tried and parked (same boards):", "", "| seat | score / board | valid-word rate | mean word len | words / min (hand) | $ / match | latency | params | note |", "|---|---:|---:|---:|---:|---|---|---|---|", *[fmt(r) for r in extra]]
-    nano = [r for r in rows if "d6_s0" in r["seat"]][0]
+    nano = [r for r in rows if "d6_lambda" in r["seat"]][0]
     gt = rows[[i for i, r in enumerate(rows) if r["seat"].startswith("Gemma 4 12B, text")][0]]
     rnd = rows[0]
     md += [
@@ -142,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         f"1. The 11M nano scores {nano['score'] / gt['score']:.1f}x the 12B on the same boards with 1000x fewer parameters, deciding in {nano['latency']} where the 12B needs {gt['latency'].split()[0]} s per call; it is the only seat that plays at hand cadence without a word queue.",
         f"2. Valid-word rate is the honest split: nano {nano['valid_rate']:.2f}, Gemma 12B {gt['valid_rate']:.2f} (text) - the 12B hallucinates words that are not on the board ({g['text']['invalid_not_on_board'] / 20:.0f} of {g['text']['words_per_call']:.0f} per call); the nano only ever traces adjacent tiles.",
         f"3. Gemma finds longer words when it is right (mean length {gt['mean_len']:.2f} vs {nano['mean_len']:.2f}); the nano's score is volume of 3-4 letter words ({nano['wpm']:.0f} words/min), longest today `{nano.get('longest', '')}`.",
-        f"4. Random swiper at {rnd['score']:.0f} is the floor; the nano is {nano['score'] / max(rnd['score'], 1):.1f}x it here (gate: >= 4x on 50 unseen boards passed at 9.6x, `nano/results/gate_d6_s0.md`).",
+        f"4. Random swiper at {rnd['score']:.0f} is the floor; the nano is {nano['score'] / max(rnd['score'], 1):.1f}x it here (gate: >= 4x on 50 unseen boards passed at 14.3x, `nano/results/gate_d6_lambda.md`; the Mac-trained d6_s0 passed at 9.6x). Lambda A100 training (1M boards, 5x the samples, len-bonus 1.6 curriculum) lifted the same 11M architecture from 11245 to the hero row above at identical CPU cost; a 25.8M depth-8 twin scored about the same at 2x the ms/action (`nano/README.md`, GPU training).",
         "5. Thinking-on and the tile-index prompt are parked for the match: thinking timed out on 20/20 boards at 30 s, the index prompt returned ~0 words at 15 s per call. Thinking is an inference-budget knob, not a match setting.",
         "",
         "![league](league.png)",
@@ -164,6 +168,9 @@ def main(argv: list[str] | None = None) -> int:
         fig_h = 3.6 + 0.35 * max(0, len(rows) - 5)
         fig, ax = plt.subplots(1, 2, figsize=(10, fig_h))
         colors = ["#999999"] + ["#1f77b4"] * (len(rows) - 3) + ["#ff7f0e", "#ff7f0e"]
+        for i, r in enumerate(rows):
+            if "d6_lambda" in r["seat"]:
+                colors[i] = "#2ca02c"
         ax[0].barh(names, [r["score"] for r in rows], color=colors)
         ax[0].set_title("score / board (20 boards, 75 s)")
         ax[0].invert_yaxis()

@@ -1,6 +1,6 @@
 """NanoSeat: CPU inference wrapper the game server drives tile by tile.
 
-  seat = NanoSeat("nano/checkpoints/d6_s0.pt", temperature=1.0)
+  seat = NanoSeat("nano/checkpoints/d6_lambda.pt", temperature=1.0)   # d6_s0.pt = Mac-trained fallback
   seat.reset(board)                 # 16 lowercase letters, row-major
   seat.step() -> ("extend", tile) | ("submit",) | ("abort",)
 
@@ -109,6 +109,6 @@ def bench(checkpoint: str, n: int = 500, threads: int = 1) -> dict:
 if __name__ == "__main__":
     import sys
 
-    ck = sys.argv[1] if len(sys.argv) > 1 else "nano/checkpoints/d6_s0.pt"
+    ck = sys.argv[1] if len(sys.argv) > 1 else "nano/checkpoints/d6_lambda.pt"
     for th in (1, 4):
         print(bench(ck, threads=th))
