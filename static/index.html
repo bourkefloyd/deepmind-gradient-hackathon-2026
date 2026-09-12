@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Word Hunt arena</title>
+<style>
+:root{--bg:#0f1117;--panel:#181b25;--tile:#f4e9d2;--tile-ink:#1b1b1b;--ink:#eef0f6;--muted:#8b91a5;--accent:#42d392;--me:#4da3ff;--bad:#ff5d5d}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-user-select:none;user-select:none;overscroll-behavior:none}
+body{display:flex;flex-direction:column;min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.screen{display:none;flex:1;flex-direction:column;padding:14px;max-width:560px;width:100%;margin:0 auto}
+.screen.on{display:flex}
+h1{font-size:28px;margin:8px 0 2px;letter-spacing:.5px}
+.sub{color:var(--muted);margin:0 0 18px;font-size:14px}
+button{font:inherit;border:0;border-radius:12px;padding:14px 18px;font-size:17px;font-weight:600;color:#fff;background:#2a2f40;cursor:pointer;touch-action:manipulation}
+button.primary{background:var(--accent);color:#0b1a12}
+button.big{width:100%;padding:18px;font-size:20px}
+button:disabled{opacity:.4}
+input{font:inherit;font-size:18px;padding:12px 14px;border-radius:12px;border:1px solid #2e3346;background:var(--panel);color:var(--ink);width:100%}
+input.code{text-transform:uppercase;letter-spacing:6px;font-weight:700;text-align:center;font-size:24px}
+.row{display:flex;gap:10px;align-items:center}
+.row>*{flex:1}
+.card{background:var(--panel);border-radius:14px;padding:14px;margin-bottom:12px}
+.name-edit{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px;margin-bottom:14px}
+.name-edit b{color:var(--ink);font-size:16px;border-bottom:1px dashed var(--muted);padding:2px 4px;outline:0;min-width:60px;display:inline-block}
+.seats{display:flex;flex-direction:column;gap:8px}
+.seat{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#1f2333;border-radius:10px;font-size:16px}
+.dot{width:14px;height:14px;border-radius:50%;flex:none}
+.seat .tag{margin-left:auto;font-size:12px;color:var(--muted)}
+.seat .score{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums}
+.codebig{font-size:44px;font-weight:800;letter-spacing:8px;text-align:center;margin:6px 0}
+.link{font-size:13px;color:var(--muted);text-align:center;word-break:break-all}
+.count{font-size:120px;font-weight:800;text-align:center;line-height:1;margin:30px 0 10px;font-variant-numeric:tabular-nums}
+.hud{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-variant-numeric:tabular-nums}
+.hud .timer{font-size:34px;font-weight:800}
+.hud .timer.low{color:var(--bad)}
+.hud .score{font-size:22px;font-weight:700;color:var(--me)}
+.hud .word{font-size:26px;font-weight:800;letter-spacing:2px;min-height:32px;flex:1;text-align:center}
+.boardwrap{position:relative;width:100%;aspect-ratio:1;max-width:440px;margin:0 auto}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%;height:100%}
+.tile{background:var(--tile);color:var(--tile-ink);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:clamp(28px,9vw,44px);font-weight:800;text-transform:uppercase;box-shadow:inset 0 -4px 0 rgba(0,0,0,.15);position:relative;cursor:pointer}
+.tile.sel{background:var(--me);color:#fff;transform:scale(.96)}
+.tile.last{outline:4px solid #fff}
+.tile .ord{position:absolute;top:4px;left:7px;font-size:11px;font-weight:700;opacity:.8}
+svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.finger{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);pointer-events:none;transition:transform .09s linear,opacity .2s;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;opacity:0;z-index:3}
+.finger.on{opacity:.95}
+.actions{display:flex;gap:10px;margin:12px 0}
+.actions button{flex:1;padding:16px}
+.flash{text-align:center;min-height:22px;font-weight:700;font-size:15px}
+.flash.ok{color:var(--accent)}.flash.bad{color:var(--bad)}
+.mywords{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px;min-height:28px}
+.chip{background:#23283a;border-radius:8px;padding:4px 8px;font-size:13px;font-weight:600;text-transform:uppercase}
+.chip small{color:var(--muted);font-weight:500;margin-left:4px}
+.ticker{background:var(--panel);border-radius:12px;padding:8px 12px;font-size:14px;max-height:160px;overflow:auto;font-variant-numeric:tabular-nums}
+.ticker div{padding:3px 0;border-bottom:1px solid #22273500}
+.ticker .miss{opacity:.5}
+.ticker b{font-weight:800;text-transform:uppercase}
+.ticker .pts{color:var(--accent);font-weight:700;margin-left:6px}
+.ticker .who{font-weight:700;margin-right:6px}
+.results .seat{flex-wrap:wrap}
+.results .words{width:100%;font-size:13px;color:var(--muted);text-transform:uppercase;line-height:1.7}
+.results .words b{color:var(--ink)}
+.rank{font-size:20px;width:26px;text-align:center}
+.small{color:var(--muted);font-size:13px;text-align:center;margin:8px 0}
+.hidden{display:none!important}
+.err{color:var(--bad);text-align:center;min-height:20px}
+</style>
+</head>
+<body>
+
+<section id="home" class="screen">
+  <h1>Word Hunt arena</h1>
+  <p class="sub">75 seconds. Same board. Humans vs. tiny models.</p>
+  <div class="name-edit">You are <b id="nameEdit" contenteditable="true" spellcheck="false"></b> <span>(tap to edit)</span></div>
+  <div class="card">
+    <button id="btnCreate" class="primary big">Create a room</button>
+  </div>
+  <div class="card">
+    <div class="row">
+      <input id="joinCode" class="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters">
+      <button id="btnJoin">Join</button>
+    </div>
+  </div>
+  <div id="homeErr" class="err"></div>
+</section>
+
+<section id="lobby" class="screen">
+  <div class="small">Room code</div>
+  <div class="codebig" id="lobbyCode"></div>
+  <div class="link" id="lobbyLink"></div>
+  <div class="name-edit" style="margin-top:14px">You are <b id="nameEdit2" contenteditable="true" spellcheck="false"></b></div>
+  <div class="card"><div class="seats" id="lobbySeats"></div></div>
+  <button id="btnStart" class="primary big">Start</button>
+  <div id="lobbyWait" class="small">Waiting for the host to start</div>
+</section>
+
+<section id="countdown" class="screen">
+  <div class="small">Round <span id="cdRound"></span> starts in</div>
+  <div class="count" id="cdNum">20</div>
+  <div class="small">Get your thumb ready. Tap adjacent tiles; tap the last tile again to submit.</div>
+  <div class="card"><div class="seats" id="cdSeats"></div></div>
+</section>
+
+<section id="play" class="screen">
+  <div class="hud">
+    <div class="timer" id="timer">75</div>
+    <div class="word" id="curWord"></div>
+    <div class="score" id="myScore">0</div>
+  </div>
+  <div class="boardwrap" id="boardwrap">
+    <div class="board" id="board"></div>
+    <svg class="paths" id="paths"></svg>
+    <div id="fingers"></div>
+  </div>
+  <div class="actions">
+    <button id="btnClear">Clear</button>
+    <button id="btnSubmit" class="primary">Submit</button>
+  </div>
+  <div class="flash" id="flash"></div>
+  <div class="mywords" id="myWords"></div>
+  <div class="ticker" id="ticker"></div>
+</section>
+
+<section id="results" class="screen results">
+  <h1 style="text-align:center">Results</h1>
+  <div class="small">Round <span id="resRound"></span> · board had <span id="resN"></span> words</div>
+  <div class="boardwrap" style="max-width:220px;margin-bottom:10px"><div class="board" id="resBoard"></div></div>
+  <div class="card"><div class="seats" id="resSeats"></div></div>
+  <div class="card"><div class="small" style="text-align:left;margin:0 0 6px">Longest words on the board</div><div class="words" id="resBest" style="font-size:13px;text-transform:uppercase;color:var(--muted);line-height:1.7"></div></div>
+  <button id="btnRematch" class="primary big">Rematch</button>
+  <div id="resWait" class="small">Waiting for the host</div>
+  <div class="small"><a href="/" style="color:var(--muted)">Leave room</a></div>
+</section>
+
+<script>
+// ---------- identity: anonymous id in localStorage; a passkey can be attached to it later ----------
+function rndHex(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return [...a].map(b=>b.toString(16).padStart(2,'0')).join('')}
+let PID=localStorage.getItem('wh_pid');if(!PID){PID='p_'+rndHex(8);localStorage.setItem('wh_pid',PID)}
+let NAME=localStorage.getItem('wh_name')||('Player-'+PID.slice(2,6));
+function setName(n){n=(n||'').replace(/[^\w \-\.]/g,'').trim().slice(0,20)||('Player-'+PID.slice(2,6));NAME=n;localStorage.setItem('wh_name',n);for(const el of document.querySelectorAll('#nameEdit,#nameEdit2'))if(el.textContent!==n)el.textContent=n;if(ws&&ws.readyState===1)send({type:'name',name:n})}
+for(const el of document.querySelectorAll('#nameEdit,#nameEdit2')){el.textContent=NAME;el.addEventListener('blur',()=>setName(el.textContent));el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();el.blur()}})}
+
+// ---------- state ----------
+const $=id=>document.getElementById(id);
+let ws=null,CODE=null,S=null,offset=0,myPath=[],myWords=[],cursors={},reconnectT=null,lastTickerLen=0;
+const NEIGH=[];for(let i=0;i<16;i++){const r=i>>2,c=i&3,n=[];for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const rr=r+dr,cc=c+dc;if(rr>=0&&rr<4&&cc>=0&&cc<4)n.push(rr*4+cc)}NEIGH.push(n)}
+
+function show(id){for(const s of document.querySelectorAll('.screen'))s.classList.toggle('on',s.id===id)}
+function send(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
+function now(){return Date.now()/1000+offset}
+function isHost(){return S&&S.host_id===PID}
+function mySeat(){return S&&S.seats.find(s=>s.seat_id===PID)}
+
+// ---------- rooms ----------
+async function createRoom(){$('homeErr').textContent='';try{const r=await fetch('/api/rooms',{method:'POST'});const j=await r.json();history.pushState({},'','/r/'+j.code);connect(j.code)}catch(e){$('homeErr').textContent='Could not create room'}}
+function joinRoom(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(code.length!==4){$('homeErr').textContent='Code is 4 characters';return}history.pushState({},'','/r/'+code);connect(code)}
+function connect(code){CODE=code;if(ws){ws.onclose=null;ws.close()}const proto=location.protocol==='https:'?'wss':'ws';ws=new WebSocket(`${proto}://${location.host}/ws/${code}`);
+  ws.onopen=()=>{send({type:'hello',player_id:PID,name:NAME})};
+  ws.onmessage=e=>onMsg(JSON.parse(e.data));
+  ws.onclose=()=>{if(CODE){reconnectT=setTimeout(()=>connect(CODE),1200)}}}
+function leave(){CODE=null;if(ws){ws.onclose=null;ws.close();ws=null}S=null;history.pushState({},'','/');show('home')}
+
+function onMsg(m){
+  if(m.type==='error'){if(m.fatal){$('homeErr').textContent=m.error;CODE=null;show('home')}return}
+  if(m.type==='welcome'){return}
+  if(m.type==='state'){const prev=S;S=m;offset=m.now-Date.now()/1000;render(prev);return}
+  if(m.type==='cursors'){for(const k in m.cursors){cursors[k]=m.cursors[k]}drawOthers();return}
+  if(m.type==='tick'){addTick(m.entry,true);const s=S&&S.seats.find(x=>x.seat_id===m.entry.seat_id);if(s&&m.entry.ok){s.score+=m.entry.delta}return}
+  if(m.type==='mine'){onMine(m);return}
+}
+
+// ---------- render ----------
+function seatRow(s,withScore){const me=s.seat_id===PID;return `<div class="seat"><span class="dot" style="background:${s.color}"></span><span>${esc(s.name)}${me?' (you)':''}${s.kind==='ai'?' <span style="color:var(--muted);font-size:12px">· AI'+(s.label?' · '+esc(s.label):'')+'</span>':''}</span>${withScore?`<span class="score">${s.score}</span>`:`<span class="tag">${s.seat_id===S.host_id?'host':(s.queued?'next round':(s.connected?'':'offline'))}</span>`}</div>`}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(prev){
+  const st=S.state;const changed=!prev||prev.state!==st||prev.round!==S.round;
+  if(st==='lobby'){show('lobby');$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=location.origin+'/r/'+S.code;$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('');const h=isHost();$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h)}
+  else if(st==='countdown'){show('countdown');$('cdRound').textContent=S.round;$('cdSeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('')}
+  else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};$('myWords').innerHTML='';$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers()}show('play');const me=mySeat();$('myScore').textContent=me?me.score:0;const my=mySeat();if(my&&my.queued){$('flash').textContent='You joined mid-round: you play the next one';$('flash').className='flash'}for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
+  else if(st==='results'){show('results');$('resRound').textContent=S.round;buildBoard($('resBoard'),S.board,false);const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const medals=['🥇','🥈','🥉'];$('resSeats').innerHTML=seats.map((s,i)=>`<div class="seat"><span class="rank">${medals[i]||(i+1)}</span><span class="dot" style="background:${s.color}"></span><span>${esc(s.name)}${s.seat_id===PID?' (you)':''}</span><span class="score">${s.score}</span><div class="words">${(s.words||[]).map(([w,p])=>`<b>${w}</b> ${p}`).join(' · ')||'<i>no words</i>'}</div></div>`).join('');const r=S.results&&S.results[0];if(r){$('resN').textContent=r.n_board_words;$('resBest').innerHTML=r.best_words.map(w=>`<b style="color:var(--ink)">${w}</b>`).join(' · ')}const h=isHost();$('btnRematch').classList.toggle('hidden',!h);$('resWait').classList.toggle('hidden',h)}
+}
+setInterval(()=>{if(!S)return;const left=Math.max(0,S.phase_ends_at-now());if(S.state==='countdown'){$('cdNum').textContent=Math.ceil(left)}else if(S.state==='playing'){const t=$('timer');t.textContent=Math.ceil(left);t.classList.toggle('low',left<10)}},100);
+
+// ---------- board / tap-to-build ----------
+function buildBoard(el,board,interactive){el.innerHTML='';for(let i=0;i<16;i++){const d=document.createElement('div');d.className='tile';d.dataset.i=i;d.textContent=board[i]||'';if(interactive){d.addEventListener('pointerdown',e=>{e.preventDefault();tap(i)})}el.appendChild(d)}}
+function tap(i){if(!S||S.state!=='playing')return;const me=mySeat();if(me&&me.queued)return;const last=myPath[myPath.length-1];
+  if(myPath.length===0){myPath=[i]}
+  else if(i===last){submitMine();return}
+  else if(myPath.includes(i)){myPath=myPath.slice(0,myPath.indexOf(i)+1)}
+  else if(NEIGH[last].includes(i)&&myPath.length<8){myPath.push(i)}
+  else{myPath=[i]}
+  drawMine();send({type:'path',path:myPath})}
+function drawMine(){const tiles=$('board').children;for(let i=0;i<16;i++){tiles[i].classList.toggle('sel',myPath.includes(i));tiles[i].classList.toggle('last',myPath[myPath.length-1]===i);const o=tiles[i].querySelector('.ord');if(o)o.remove();const k=myPath.indexOf(i);if(k>=0){const s=document.createElement('span');s.className='ord';s.textContent=k+1;tiles[i].appendChild(s)}}$('curWord').textContent=myPath.map(i=>S.board[i]).join('').toUpperCase();drawPaths()}
+function clearMine(){myPath=[];drawMine();send({type:'path',path:[]})}
+function submitMine(){if(myPath.length<3){flash('3+ letters','bad');return}send({type:'submit',path:myPath});myPath=[];drawMine();send({type:'path',path:[]})}
+function onMine(m){if(m.ok){flash(`${m.word} +${m.delta}`,'ok');myWords.push([m.word,m.delta]);$('myWords').innerHTML=myWords.map(([w,p])=>`<span class="chip">${w}<small>${p}</small></span>`).join('');$('myScore').textContent=m.total}else{flash(`${m.word} · ${m.reason==='dup'?'already found':m.reason==='closed'?'round over':'not a word'}`,'bad')}}
+let flashT=null;function flash(t,c){const f=$('flash');f.textContent=t;f.className='flash '+c;clearTimeout(flashT);flashT=setTimeout(()=>{f.textContent=''},1500)}
+$('btnClear').onclick=clearMine;$('btnSubmit').onclick=submitMine;
+
+// ---------- fingers + paths for other seats ----------
+function tileCenter(i){const wrap=$('boardwrap').getBoundingClientRect();const t=$('board').children[i].getBoundingClientRect();return [t.left-wrap.left+t.width/2,t.top-wrap.top+t.height/2]}
+function buildFingers(){const f=$('fingers');f.innerHTML='';for(const s of S.seats){if(s.seat_id===PID)continue;const d=document.createElement('div');d.className='finger';d.id='f_'+cssId(s.seat_id);d.style.background=s.color;d.textContent=s.name[0]||'?';f.appendChild(d)}}
+function cssId(s){return s.replace(/[^a-zA-Z0-9]/g,'_')}
+function layoutFingers(){drawOthers()}
+function drawOthers(){if(!S||S.state!=='playing')return;for(const s of S.seats){if(s.seat_id===PID)continue;const d=$('f_'+cssId(s.seat_id));if(!d)continue;const c=cursors[s.seat_id];if(c&&c.tile!=null){const [x,y]=tileCenter(c.tile);d.style.transform=`translate(${x}px,${y}px)`;d.classList.add('on')}else{d.classList.remove('on')}}drawPaths()}
+function drawPaths(){const svg=$('paths');if(!S||!$('board').children.length)return;let h='';for(const s of S.seats){const p=s.seat_id===PID?myPath:(cursors[s.seat_id]||{}).path;if(!p||p.length<2)continue;const pts=p.map(i=>tileCenter(i).join(',')).join(' ');h+=`<polyline points="${pts}" fill="none" stroke="${s.seat_id===PID?'#fff':s.color}" stroke-width="${s.seat_id===PID?5:6}" stroke-opacity="${s.seat_id===PID?.9:.55}" stroke-linecap="round" stroke-linejoin="round"/>`}svg.innerHTML=h}
+window.addEventListener('resize',()=>requestAnimationFrame(drawOthers));
+
+// ---------- ticker ----------
+function addTick(e,prepend){const t=$('ticker');const d=document.createElement('div');d.className=e.ok?'':'miss';d.innerHTML=`<span class="who" style="color:${e.color}">${esc(e.name)}</span><b>${e.word}</b>${e.ok?`<span class="pts">+${e.delta}</span>`:`<span style="color:var(--muted)"> · ${e.reason}</span>`}`;t.prepend(d);while(t.children.length>60)t.lastChild.remove()}
+
+// ---------- buttons ----------
+$('btnCreate').onclick=createRoom;$('btnJoin').onclick=()=>joinRoom($('joinCode').value);$('joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')joinRoom($('joinCode').value)});
+$('btnStart').onclick=()=>send({type:'start'});$('btnRematch').onclick=()=>send({type:'rematch'});
+$('lobbyLink').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(location.origin+'/r/'+S.code);$('lobbyLink').textContent='copied: '+location.origin+'/r/'+S.code};
+document.querySelector('#results a').onclick=e=>{e.preventDefault();leave()};
+
+// ---------- boot ----------
+const m=location.pathname.match(/^\/r\/([A-Za-z0-9]{4})/);if(m){connect(m[1].toUpperCase())}else{show('home')}
+</script>
+</body>
+</html>
