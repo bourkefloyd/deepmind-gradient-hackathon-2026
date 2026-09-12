@@ -205,6 +205,16 @@ async def ws_room(ws: WebSocket, code: str):
             elif spectator:
                 if t == "ping":
                     await ws.send_json({"type": "pong", "now": time.time()})
+                elif t == "integration":
+                    # Client-side commentator (Mac-side Gemma via Nango) reports its tool call; rebroadcast so
+                    # every phone and the projector toast it, same shape as the server-side handler emits.
+                    allowed = ("provider", "action", "event", "ok", "ms", "round", "by", "label", "error", "dry_run", "text", "model", "caller")
+                    payload = {"type": "integration", **{k: msg[k] for k in allowed if k in msg}}
+                    payload.setdefault("provider", "nango")
+                    payload.setdefault("by", "commentator")
+                    payload.setdefault("round", room.round_no)
+                    payload["code"] = room.code
+                    await room.broadcast(payload)
             elif seat is None:
                 await ws.send_json({"type": "error", "error": "say hello first"})
             elif t == "name":

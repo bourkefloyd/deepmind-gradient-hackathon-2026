@@ -51,7 +51,7 @@ class GemmaPolicy(WordQueuePolicy):
 
     def __init__(self, base_url: str, model: str, api_key: str = "", rng: random.Random | None = None,
                  words_per_call: int = 10, max_calls: int = 12, thinking: bool = False, timeout: float = 30.0,
-                 temperature: float = 0.2, max_tokens: int = 200):
+                 temperature: float = 0.2, max_tokens: int = int(os.environ.get("WH_GEMMA_MAX_TOKENS", 120))):
         super().__init__(rng)
         self.base_url = base_url.rstrip("/")
         self.model = model
