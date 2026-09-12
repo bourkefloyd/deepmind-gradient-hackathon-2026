@@ -16,6 +16,7 @@ from __future__ import annotations
 SEAT_ICON = {"human": "🧑", "ai": "🤖"}
 MEDALS = ["🥇", "🥈", "🥉"]
 LONGEST_SHOWN = 6
+FOOTER = "📡 posted via Nango · Word Hunt VS"
 
 
 def n(x) -> str:
@@ -51,6 +52,7 @@ def room_created(p: dict) -> str:
         lines.append(f"Seats: {_seat_inline(p['seats'])}")
     if p.get("race_s"):
         lines.append(f"⏱️ {int(p['race_s'])} s race · same board for everyone · {int(p.get('countdown_s', 0))} s countdown")
+    lines.append(FOOTER)
     return "\n".join(lines)
 
 
@@ -100,6 +102,7 @@ def round_ended(p: dict) -> str:
         parts.append("\n".join(stats))
     if p.get("url"):
         parts.append(f"⚔️ **Think you can beat the bots?**\n**Rematch →** {p['url']}")
+    parts.append(FOOTER)
     return "\n\n".join(parts)
 
 

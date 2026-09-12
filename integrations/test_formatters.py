@@ -28,7 +28,9 @@ Best: `DATES` **+800**
 🔠 Longest: `DEPILATE` · `DEPLANES` · `ENDPLATE` · `SELENATE` · `TADPOLES` · `DELATES`
 
 ⚔️ **Think you can beat the bots?**
-**Rematch →** https://wordhunt-pngitthrva-uw.a.run.app/r/9N3G"""
+**Rematch →** https://wordhunt-pngitthrva-uw.a.run.app/r/9N3G
+
+📡 posted via Nango · Word Hunt VS"""
 
 BOURKE_PAYLOAD = {
     "code": "9N3G", "round": 1, "url": "https://wordhunt-pngitthrva-uw.a.run.app/r/9N3G",
@@ -55,7 +57,7 @@ class RoundEnded(unittest.TestCase):
         self.assertIn("**4.** 🤖 **Reflex** · *heuristic*", out)        # beyond 3rd: numbered
         self.assertIn("📚 **96** possible words\n💰 **41,200** max score", out)
         self.assertIn("🔠 Longest: `ETERNAL` · `LANTERN` · `ANTLER` · `RENTAL`", out)
-        self.assertTrue(out.endswith("⚔️ **Think you can beat the bots?**\n**Rematch →** https://x.run.app/r/ABCD"))
+        self.assertTrue(out.endswith("⚔️ **Think you can beat the bots?**\n**Rematch →** https://x.run.app/r/ABCD\n\n📡 posted via Nango · Word Hunt VS"))
         self.assertLess(len(out), 2000)
 
     def test_level_theme_in_header(self):
@@ -70,6 +72,7 @@ class RoundEnded(unittest.TestCase):
         self.assertIn("🥇 🧑 **A**\n**100 pts** · 1 words", out)
         self.assertNotIn("Board Stats", out)
         self.assertNotIn("Rematch", out)
+        self.assertTrue(out.endswith(formatters.FOOTER))
 
 
 class ShortPosts(unittest.TestCase):
@@ -79,6 +82,11 @@ class ShortPosts(unittest.TestCase):
         self.assertEqual(out.splitlines()[0], "🎮 **Room ABCD** is open 🎮")
         self.assertIn("**Join →** https://x.run.app/r/ABCD", out)
         self.assertIn("🧑 **Bourke** · 🤖 **Nano** · *nano 10M*", out)
+        self.assertEqual(out.splitlines()[-1], "📡 posted via Nango · Word Hunt VS")
+
+    def test_round_started_has_no_footer(self):
+        out = formatters.round_started(sample_payloads("ABCD")["round_started"])
+        self.assertNotIn("posted via Nango", out)
 
     def test_round_started(self):
         p = sample_payloads("ABCD")["round_started"]

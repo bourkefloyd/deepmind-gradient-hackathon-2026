@@ -41,6 +41,7 @@ def from_room(room: Any) -> dict[str, Any]:
         "code": room.code, "round": room.round_no, "url": s.room_url(room.code), "seats": seats,
         "countdown_s": getattr(room, "countdown_s", None) or _module_const(room, "COUNTDOWN_S", 20),
         "race_s": getattr(room, "race_s", None) or _module_const(room, "RACE_S", 75),
+        "quiet": bool(getattr(room, "quiet", False)),     # POST /api/rooms {quiet: true}: no Discord posts
     }
     level = getattr(room, "level", None)
     if level is not None:
@@ -77,6 +78,7 @@ def from_snapshot(snap: dict[str, Any], public_url: str = "") -> dict[str, Any]:
     p: dict[str, Any] = {
         "code": code, "round": snap.get("round", 0), "url": url, "seats": seats,
         "countdown_s": snap.get("countdown_s", 20), "race_s": snap.get("race_s", 75),
+        "quiet": bool(snap.get("quiet", False)),
     }
     if snap.get("level"):
         p["level"] = dict(snap["level"])
@@ -97,6 +99,9 @@ def _module_const(obj: Any, name: str, default: float) -> float:
 async def discord_recap(event_type: str, payload: dict[str, Any]) -> None:
     fmt = formatters.FORMATTERS.get(event_type)
     if fmt is None:
+        return
+    if payload.get("quiet"):
+        log.info("%s: room %s is quiet, not posting", event_type, payload.get("code"))
         return
     text = fmt(payload)
     res = await discord.send_recap(text)

@@ -62,6 +62,27 @@ class Outcome:
     raw_response: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
+def model_label(model: str) -> str:
+    m = model.lower()
+    for key, label in (("31b", "Gemma 31B"), ("27b", "Gemma 27B"), ("12b", "Gemma 12B"), ("e4b", "Gemma E4B"), ("e2b", "Gemma E2B")):
+        if key in m:
+            return label
+    return model.rsplit("/", 1)[-1] or "Gemma"
+
+
+def decorate_model_text(text: str, model: str, latency_s: float) -> str:
+    """The Discord post itself is the proof: who wrote it, and that it arrived through a Nango tool call."""
+    return (f"🤖 **{model_label(model)}** (via Nango tool call)\n{text.strip()}\n"
+            f"via Nango → Discord · model chose the tool in {latency_s:.1f} s")
+
+
+def decorate_template_text(text: str) -> str:
+    text = text.rstrip()
+    if text.endswith(formatters.FOOTER):          # swap the server footer for the fallback one
+        text = text[: -len(formatters.FOOTER)].rstrip()
+    return text + "\n\nvia Nango → Discord · templated"
+
+
 def user_prompt(payload: dict[str, Any]) -> str:
     seats = sorted(payload.get("seats", []), key=lambda s: -int(s.get("score", 0)))
     lines = [f"Room {payload.get('code')} round {payload.get('round')} is over. Standings:"]
@@ -137,12 +158,15 @@ async def commentate(payload: dict[str, Any], base_url: str = DEFAULT_BASE_URL, 
     tc = extract_tool_call(resp) if not error else None
     if tc is not None:
         log.info("MODEL CALLED NANGO TOOL (%.1fs): %s", latency, json.dumps(tc, ensure_ascii=False))
-        results = await tools.dispatch([tc])
-        r = results[0]
         try:
-            text = json.loads(tc["function"].get("arguments") or "{}").get("text", "")
+            args = json.loads(tc["function"].get("arguments") or "{}")
         except Exception:  # noqa: BLE001
-            text = ""
+            args = {}
+        text = decorate_model_text(str(args.get("text", "")), model, latency)
+        # Same call the model made, with the attribution header/footer wrapped around its text.
+        posted_call = {**tc, "function": {**tc["function"], "arguments": json.dumps({**args, "text": text}, ensure_ascii=False)}}
+        results = await tools.dispatch([posted_call])
+        r = results[0]
         if "error" in r:
             log.warning("tool dispatch failed: %s", r["error"])
             return Outcome("none", text, tc, latency, r["error"], None, resp)
@@ -157,7 +181,7 @@ async def commentate(payload: dict[str, Any], base_url: str = DEFAULT_BASE_URL, 
     log.warning("no tool call (%.1fs): %s", latency, why)
     if not fallback:
         return Outcome("none", "", None, latency, why, None, resp)
-    text = formatters.round_ended(payload)
+    text = decorate_template_text(formatters.round_ended(payload))
     try:
         res = await discord.send_recap(text)
     except Exception as e:  # noqa: BLE001
@@ -197,6 +221,9 @@ async def spectate(server: str, room: str, base_url: str, model: str, rounds: in
                 if st == "results" and rnd != last_round_seen:
                     last_round_seen = rnd
                     payload = handlers.from_snapshot(msg, public_url)
+                    if payload.get("quiet"):
+                        log.info("round %d over in %s; room is quiet, skipping", rnd, payload["code"])
+                        continue
                     log.info("round %d over in %s; asking %s", rnd, payload["code"], model)
                     out = await commentate(payload, base_url, model, deadline_s)
                     log.info("outcome: posted_by=%s latency=%.1fs%s\n%s", out.posted_by, out.model_latency_s,
