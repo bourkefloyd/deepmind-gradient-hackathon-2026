@@ -53,7 +53,8 @@ input.code{text-transform:uppercase;letter-spacing:6px;font-weight:700;text-alig
 .tile.last{outline:4px solid #fff}
 .tile .ord{position:absolute;top:4px;left:7px;font-size:11px;font-weight:700;opacity:.8}
 svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.finger{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);pointer-events:none;transition:transform .09s linear,opacity .2s;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;opacity:0;z-index:3}
+.fingers{position:absolute;inset:0;pointer-events:none;z-index:3}
+.finger{position:absolute;top:0;left:0;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);pointer-events:none;transition:transform .09s linear,opacity .2s;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;opacity:0;z-index:3}
 .finger.on{opacity:.95}
 .actions{display:flex;gap:10px;margin:12px 0}
 .actions button{flex:1;padding:16px}
@@ -147,7 +148,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   <div class="boardwrap" id="boardwrap">
     <div class="board" id="board"></div>
     <svg class="paths" id="paths"></svg>
-    <div id="fingers"></div>
+    <div id="fingers" class="fingers"></div>
   </div>
   <div class="actions">
     <button id="btnClear">Clear</button>
