@@ -32,6 +32,19 @@ model's own predictions (hinted self-distillation), then replays a fixed 20-boar
 score drops more than 3%. Call it during the 20 s rematch countdown, off the event loop (`asyncio.to_thread`). Pass
 `replay="data/wh_200000.npz"` if that file exists; otherwise it generates 400 replay boards at construction.
 
+## Lab notebook (`nano/lab_notebook.ipynb`, rendered `nano/lab_notebook.html`)
+
+One executable record of the model: architecture (token layout, heads, `[CLS]` attention), data and soft labels, the
+recorded `d6_s0` training run plus a live CPU smoke run, inference latency, sample trajectories (traced paths, value head
+along each episode, two seeds diverging), the gate and league numbers, and the live-learning curve with three live rounds.
+It documents the Mac-trained `d6_s0.pt` (the fallback seat); the recorded artifacts it reads are
+`nano/results/{train,gate}_d6_s0.json` and `live_learning_curve.md`. Needs `matplotlib nbformat nbconvert nbclient ipykernel`
+in the venv (notebook-only, not in `requirements.txt`); ~90 s on CPU from the repo root:
+
+```
+.venv/bin/python -m jupyter nbconvert --execute --to html --output lab_notebook.html nano/lab_notebook.ipynb
+```
+
 ## GPU training (Lambda, hackathon requirement)
 
 Instance: Lambda Cloud `gpu_1x_a100_sxm4` (1x A100-SXM4-40GB, 30 vCPU, us-west-2, $1.99/h), Lambda Stack torch 2.7 +

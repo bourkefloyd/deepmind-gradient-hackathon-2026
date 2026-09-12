@@ -237,6 +237,7 @@ flowchart LR
 - Train: AdamW (0.9, 0.95), wd 0.1, clip 1.0, cosine to 10 %, lr `3e-4 × (4/depth)^0.5`, fp32, no AMP, batch 256, whole dataset pre-tokenised onto the device; `--budget-min` stops the cosine on wall clock; `--init` warm-starts. Device from `nano/device.py` (`make check-mps` refuses a silent CPU fallback on Apple Silicon).
 - The shipped checkpoint `d6_s0`: 200k boards → 4.96 M training samples, 17,278 steps × 256 in a 30-minute budget on **MPS on the Mac** (2,457 samples/s), loss 2.61 → 1.07, val `type_top1 0.935`, `target_top1 0.767`, `value_acc 0.964`.
 - Make targets: `make words`, `make data` (`BOARDS=200000`), `make train` (`DEPTH=6 STEPS=20000`), `make data-smoke` / `train-smoke` / `rollout-smoke`.
+- Lab notebook (figures for architecture, training curve, inference latency, sample trajectories, gate/league, live learning): `nano/lab_notebook.ipynb`, rendered `nano/lab_notebook.html`. How to re-run: `nano/README.md`.
 
 ### Gate (`nano/gate.py`, result `nano/results/gate_d6_s0.md`)
 
@@ -476,6 +477,7 @@ nano/                   the hero model (Mac-side today)
   device.py             MPS guard (make check-mps)
   checkpoints/d6_s0.pt  the shipped checkpoint (44 MB)
   results/              gate_d6_s0.*, train_d6_s0.json, live_learning_curve.*
+  lab_notebook.ipynb    executable lab + plots; rendered lab_notebook.html
 gemma_seat/             Gemma 12B bot and evals (Mac-side)
   client.py             GemmaSeatClient: prompts, streaming, image render, penalties
   bot.py                WebSocket bot, Hand, GemmaSeat (raw vs --filter-solver)
@@ -510,6 +512,7 @@ Three solver implementations exist on purpose for now (`wordhunt/solver.py` retu
 | integrations dry-run / tests | `python -m integrations.demo`, `python -m integrations.test_formatters` |
 | nano train / gate / league | `make check-mps && make data && make train`; `python -m nano.gate --model nano/checkpoints/d6_s0.pt --out nano/results/gate_d6_s0.md`; `python -m nano.league --out docs/league.md` |
 | live-learning simulation | `python -m nano.learn --checkpoint nano/checkpoints/d6_s0.pt --rounds 10 --out nano/results/live_learning_curve.md` |
+| nano lab notebook | `nano/lab_notebook.ipynb` / `nano/lab_notebook.html`; re-render: `.venv/bin/python -m jupyter nbconvert --execute --to html --output lab_notebook.html nano/lab_notebook.ipynb` |
 | Gemma evals | `python -m gemma_seat.eval --n 20 --seed 0 --json out.json`; `--merge a.json b.json` |
 
 ### What is local vs cloud

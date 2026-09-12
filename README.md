@@ -22,11 +22,12 @@ wordhunt/            game server package
     nano.py          nano policy seat (StudentPolicy decode, temperature sampling)
     gemma.py         Gemma seats via Respan/vLLM, text-grid + screenshot, thinking off
     fake.py          heuristic "reflex bot" (fallback, same visuals) + random swiper
-nano/                the hero model
+nano/                the hero model (see nano/README.md)
   data.py            boards -> words -> frequency-weighted paths -> soft targets
   model.py           depth-6 (~10M) pointer/type/value heads (copied from nanoagent)
   train.py           soft-CE + BCE(value), fp32, no AMP (copied from nanoagent)
   gate.py            50 unseen boards: >= 4x random swiper, beats E4B on valid-word rate
+  lab_notebook.ipynb executable lab (architecture, train, inference, trajectories, plots); rendered html beside it
 static/
   index.html         host view doubles as phone view; board, ticker, QR, join
 data/                word lists + boards (see data/README.md; lists are not committed)
