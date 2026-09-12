@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#070b16">
-<title>Word Hunt VS — humans vs. models</title>
+<title>Word Hunt VS — Humans vs AI</title>
 <style>
 :root{--bg:#070b16;--panel:#0d1424;--panel2:#131c31;--line:#1c2a47;--tile:#f3e7c9;--tile-ink:#141414;--ink:#eef2fb;--muted:#8391ad;--accent:#2ee87a;--accent-ink:#052b14;--blue:#3b9dff;--me:#3b9dff;--bad:#ff5d6c;--gold:#f5b301;--ai:#3b9dff;--hu:#2ee87a}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;min-width:0}
@@ -388,7 +388,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 <body>
 
 <header class="topbar">
-  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#052b14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></span><div><b>Word Hunt <em>VS</em></b><span class="tag">humans vs. models</span></div></div>
+  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#052b14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></span><div><b>Word Hunt <em>VS</em></b><span class="tag">Humans vs AI</span></div></div>
   <div class="pills">
     <a href="/lab" target="_blank" rel="noopener" class="pill lab-link">Lab (Deep Dive)</a>
     <div class="hidden" id="topRoom">
@@ -402,7 +402,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 <section id="home" class="screen">
   <div class="hero">
     <h1>Word Hunt <em>VS</em></h1>
-    <p class="sub">humans vs. models · 75 seconds · one shared board</p>
+    <p class="sub">Humans vs AI · 75 seconds · one shared board</p>
   </div>
   <div class="name-edit">You are <b id="nameEdit" contenteditable="true" spellcheck="false"></b> <span>(tap to edit)</span></div>
   <div class="banner hidden" id="homeBanner"></div>
@@ -427,7 +427,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
       <div class="link" id="lobbyLink"></div>
       <div class="theme" id="lobbyTheme"></div>
       <img class="qr" id="lobbyQr" alt="QR to join">
-      <div class="small">Scan or share the link · humans vs. models</div>
+      <div class="small">Scan or share the link · Humans vs AI</div>
       <div class="name-edit" style="margin:10px 0 0">You are <b id="nameEdit2" contenteditable="true" spellcheck="false"></b></div>
     </div>
   </div>
@@ -511,7 +511,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 
 <section id="spect" class="screen spect">
   <div class="sp-top">
-    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#052b14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></span><div><h1>Word Hunt <em>VS</em></h1><div class="tagline">humans vs. models <span class="live" id="spLive"><i></i><span>Lobby</span></span></div></div></div>
+    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#052b14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></span><div><h1>Word Hunt <em>VS</em></h1><div class="tagline">Humans vs AI <span class="live" id="spLive"><i></i><span>Lobby</span></span></div></div></div>
     <div class="sp-join"><div class="join"><div class="lbl">Join at</div><span id="spJoin"></span><b id="spCode"></b></div><img id="spQr" alt="QR to join"></div>
   </div>
   <div class="sp-main">
@@ -640,7 +640,7 @@ function renderSpect(prev,changed){show('spect');const st=S.state;$('spCode').te
   if(st!=='playing'&&st!=='results')$('spBigCard').classList.add('hidden');
   if(st==='lobby'){$('spBig').textContent='Waiting';$('spBig').classList.remove('low');$('spNote').textContent='Scan to join. The host presses Start.'}
   else if(st==='countdown'){$('spBig').textContent=Math.ceil(Math.max(0,S.phase_ends_at-now()));$('spBig').classList.remove('low');$('spNote').textContent='Round '+S.round+' starts in'}
-  else if(st==='playing'){if(changed){cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,false);buildFingers();renderBig()}$('spBigCard').classList.remove('hidden');$('spNote').textContent='Round '+S.round+' · humans vs. models';for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;drawOthers();requestAnimationFrame(drawOthers)}
+  else if(st==='playing'){if(changed){cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,false);buildFingers();renderBig()}$('spBigCard').classList.remove('hidden');$('spNote').textContent='Round '+S.round+' · Humans vs AI';for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;drawOthers();requestAnimationFrame(drawOthers)}
   else if(st==='results'){$('spBig').textContent='Final';$('spBig').classList.remove('low');const r=S.results&&S.results[0];$('spNote').textContent=r?(fmtN(r.n_board_words)+' words possible · longest: '+r.best_words.slice(0,4).join(', ').toUpperCase()):'';for(const f of $('fingers').children)f.classList.remove('on');$('paths').innerHTML=''}
   renderSpSeats()}
 
