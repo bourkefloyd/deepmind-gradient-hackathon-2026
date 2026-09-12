@@ -1,6 +1,26 @@
-# Word Hunt VS (humans vs. models): nano is the hero
+# Word Hunt VS — Humans vs AI
 
-Open Model Hack, San Francisco, 2026-09-12. Full plan: [PLAN.md](PLAN.md).
+**TL;DR:** On-policy distillation of frontier AI agents into tiny, task-specialized action models.
+
+Word Hunt VS (Humans vs AI) is a live multiplayer arena where humans, a frontier open model, and a tiny specialized model compete on the exact same 4x4 board under the same 75-second clock and the same physical action constraints ("Word Hunt").
+
+Our smallest agent is an 11M-parameter transformer trained on a Lambda A100. At inference it sees only the board and its current path — no dictionary — and acts tile-by-tile through the same simulated "hand" as a human player. It competes live against Gemma 4 12B served with vLLM on Lambda, heuristic baselines, and people joining from their phones.
+
+The larger idea is to use frontier models as teachers rather than permanent workers. A smaller policy acts inside an interactive environment, reaches the states it would naturally encounter, receives demonstrations or corrections from a stronger model, and is retrained on those trajectories. Repeating that loop can turn an expensive general-purpose model into a fast, cheap, specialized action policy.
+
+Today's demo proves both ends of that loop: a frontier model operating in the environment and a tiny specialized policy operating in the same environment. Our current 11M model was trained from generated/self-solved trajectories rather than a fully closed-loop on-policy teacher process; closing that loop with teacher intervention is the next step (`nano/learn.py`).
+
+Word Hunt also doubles as a human-calibrated evaluation arena. Every agent is measured on the same task for score, validity, latency, token usage, cost, and behavior under time pressure. Gemma calls are traced through Respan, and at the buzzer Gemma can invoke a Nango tool to publish the round recap directly to Discord.
+
+**Same environment. Same actions. Same clock. Frontier teacher -> tiny policy.**
+
+Team **wordhunt**, Open Model Hack, San Francisco, 2026-09-12. Submission: [docs/submission.md](docs/submission.md). Architecture: [docs/architecture.md](docs/architecture.md). Full plan: [PLAN.md](PLAN.md).
+
+## Quickstart
+
+Run locally: `make setup && make words && make serve` (players at `/r/CODE`, projector at `/s/CODE`); the nano seat needs torch + numpy (`make setup` installs them) and `NANO_CKPT=nano/checkpoints/d6_lambda.pt`. Live demo: https://wordhunt-pngitthrva-uw.a.run.app. Runbook: [docs/demo-runbook.md](docs/demo-runbook.md); more commands in [docs/architecture.md §6](docs/architecture.md#6-repo-map-runbook-local-vs-cloud).
+
+## Original pitch and build plan (2026-09-12 morning)
 
 **Pitch.** A joinable 75-second Word Hunt race on one shared board: one or two humans on their phones, a ~10M-parameter nano policy on CPU (ours), and Gemma 4 seats (E4B, 31B on Lambda) for comparison. Every AI seat acts through the same tile-by-tile "hand", so the projector shows four fingers racing on one board, and the same room with no humans is the eval harness.
 
@@ -43,6 +63,7 @@ scripts/             run server, start trainer on Lambda, pull weights
 
 Cut from the bottom. **MP** = minimum playable (1 + 3 + two fake AIs). Owner letters from PLAN.md section 9.
 
+- [ ] **Next step: closed-loop on-policy distillation with teacher intervention** (nano acts, Gemma corrects the states it actually reaches, retrain on those trajectories; `nano/learn.py` is the between-round hook)
 - [ ] 1. Solver + board generator + scoring **(MP, A)**
 - [ ] 2. Data generator -> `train.py` running on Lambda; one person, nothing else **(A)**
 - [ ] 3. Room + timer + one shared page + hand controller **(MP, B)**

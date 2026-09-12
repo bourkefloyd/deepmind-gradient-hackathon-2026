@@ -185,6 +185,10 @@ That table is the research claim. The live match is the product claim.
 
 ## 7. Build order (cut from the bottom)
 
+0. **Next step: closed-loop on-policy distillation with teacher intervention.** The nano acts in
+   the room, the states it actually reaches go to Gemma for demonstrations or corrections, retrain
+   on those trajectories between rounds (`nano/learn.py`), repeat. Today's 11M model is trained from
+   self-solved trajectories; items 8-9 below are the hooks. Frontier teacher -> tiny policy.
 1. Solver + board generator + scoring (also the eval and dead-board filter).
 2. Data generator -> `train.py` running on Lambda by 11:00. One person owns this and nothing else.
 3. Room + timer + one shared page (host view doubles as phone view) + hand controller.

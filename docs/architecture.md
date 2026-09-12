@@ -2,7 +2,33 @@
 
 Everything built so far, as it is on `main` (read from the code on 2026-09-12, `0c781ac`). Where the code and the plan disagree, this doc follows the code and says so. Companion docs: [PLAN.md](../PLAN.md) (the pitch and decisions), [docs/league.md](league.md) (AI-only league table), [docs/talk-nano-slide.md](talk-nano-slide.md) (the three numbers for the talk), [docs/nanoagent-handoff.md](nanoagent-handoff.md) (prior work), [docs/gemma4-local-vision-findings.md](gemma4-local-vision-findings.md) (why mlx-vlm, not Ollama).
 
-Contents: [1. System overview](#1-system-overview) · [2. Game loop](#2-game-loop) · [3. Nano seat](#3-nano-seat) · [4. Gemma 12B seat](#4-gemma-12b-seat) · [5. Integrations](#5-integrations-nango--discord) · [6. Repo map, runbook, local vs cloud](#6-repo-map-runbook-local-vs-cloud) · [7. Known gaps](#7-known-gaps-and-discrepancies)
+Contents: [Concept](#concept-frontier-teacher---tiny-policy) · [1. System overview](#1-system-overview) · [2. Game loop](#2-game-loop) · [3. Nano seat](#3-nano-seat) · [4. Gemma 12B seat](#4-gemma-12b-seat) · [5. Integrations](#5-integrations-nango--discord) · [6. Repo map, runbook, local vs cloud](#6-repo-map-runbook-local-vs-cloud) · [7. Known gaps](#7-known-gaps-and-discrepancies)
+
+---
+
+## Concept: frontier teacher -> tiny policy
+
+**TL;DR:** On-policy distillation of frontier AI agents into tiny, task-specialized action models. Word Hunt VS (Humans vs AI) is the environment in which both ends of that loop run today. Same environment. Same actions. Same clock.
+
+```mermaid
+flowchart LR
+  ENV["Environment<br/>the room (wordhunt/room.py) + the Hand (wordhunt/hand.py)<br/>4x4 board, 75 s clock, one tile per tick, solver as judge"]
+  STU["Student: nano<br/>11M-param transformer, CPU in-process<br/>sees board + own path, no dictionary"]
+  TEA["Teacher: Gemma 4<br/>12B via vLLM on Lambda (seat, Respan log mode)<br/>31B via the Respan gateway (commentator, eval)"]
+  HUM["Humans on phones<br/>the bar"]
+  STU -->|"acts tile by tile"| ENV
+  TEA -->|"acts through the same Hand"| ENV
+  HUM -->|"tap / swipe"| ENV
+  ENV -->|"states the student actually reaches<br/>+ validated words from every seat"| LRN["Retrain on those trajectories<br/>nano/learn.py (between rounds, keep / rollback)"]
+  TEA -.->|"demonstrations / corrections<br/>(next: on-policy teacher loop)"| LRN
+  LRN -->|"new weights"| STU
+```
+
+- **Environment** = the room and the hand: every seat, human or model, gets the same board, the same clock and the same physical action constraints (§2).
+- **Student** = the nano seat (§3): an 11M-parameter policy that acts in the environment at ~20 ms per action with zero tokens.
+- **Teacher** = Gemma 4: 12B served with vLLM on the Lambda A100 as a live seat, 31B via the Respan gateway for commentary and the nano-vs-Gemma eval (§4, §5b). Today Gemma is the frontier model operating in the same environment and the comparison; the same room with no humans is the eval harness ([docs/league.md](league.md)).
+- **Honest status of the loop.** The shipped checkpoint (`d6_lambda.pt`) was trained from generated/self-solved trajectories (solver-annotated boards, §3 "Training pipeline"), not from a closed-loop on-policy teacher process. What exists today is both ends of the loop in one environment plus a measured between-round learner.
+- **Next: on-policy teacher loop.** `nano/learn.py` (`OnlineLearner`, §3 "Live learner") already turns the words found by any seat, Gemma or human, into a 50-step CPU update with a held-out check and rollback. Closing the loop means: let the student act, hand the states it actually reaches to the teacher for demonstrations or corrections (the `EscalatingPolicy` stub in `nano/policy.py` is the escalation hook), retrain on those trajectories during the rematch countdown, repeat. Not wired into the live room yet (§7 item 8).
 
 ---
 

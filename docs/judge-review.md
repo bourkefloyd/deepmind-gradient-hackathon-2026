@@ -60,7 +60,7 @@ If the Lambda Gemma seat is not up at 4:30: run the Mac bot (`make gemma-seat RO
 
 ## 4. Commercial viability (VC voice)
 
-Open models are shipping faster than anyone can evaluate them on tasks that look like the real world: perception, timing, acting under a clock against people. Word Hunt VS is a wedge into that: a spectatable arena where humans, a frontier open model, and a distilled 10M-parameter student play the same board under the same physical constraints, and every round produces a labelled comparison (valid rate, latency, tokens, cost, word length) that a benchmark table cannot fake. The game is the acquisition channel and the ground truth; the eval harness and the distillation recipe (big open model as teacher, tiny on-device policy as the product) are the business. It fits an "open source, small models, hybrid compute" thesis exactly: the money is not in the game, it is in being the place where teams find out whether their small model actually plays like a person before they put it on a device.
+The thesis is on-policy distillation of frontier AI agents into tiny, task-specialized action models: frontier teacher -> tiny policy, same environment, same actions, same clock (today's 11M model is trained from self-solved trajectories; closing the teacher loop is the next step). Word Hunt VS is a wedge into that: a spectatable arena where humans, a frontier open model, and a distilled 11M-parameter student play the same board under the same physical constraints, and every round produces a labelled comparison (valid rate, latency, tokens, cost, word length) that a benchmark table cannot fake. The game is the acquisition channel and the ground truth; the eval harness and the distillation recipe (big open model as teacher, tiny on-device policy as the product) are the business. It fits an "open source, small models, hybrid compute" thesis exactly: the money is not in the game, it is in being the place where teams find out whether their small model actually plays like a person before they put it on a device.
 
 - **Model:** free-to-play arenas as the top of funnel; paid eval seats for model teams (bring your endpoint, get a human-calibrated score, traces, and cost per action across boards and games); a distillation service that trains the nano-sized policy from a customer's teacher model and ships it as a checkpoint.
 - **Expansion:** every casual game with a fixed rule set (word games, match-3, trivia) is a new arena and a new benchmark; game studios pay for believable bots that play at human pace, which is exactly the hand controller.
@@ -70,9 +70,9 @@ Open models are shipping faster than anyone can evaluate them on tasks that look
 
 ## 5. Submission form draft
 
-**Team name:** `<TEAM NAME>` (placeholder; pick before 4:30)
+**Team name:** wordhunt (project: Word Hunt VS — Humans vs AI; final answers in [docs/submission.md](submission.md))
 
-**One line:** Word Hunt VS: humans on phones race an 11M-parameter model we trained today and Gemma 4 12B on one shared board; every AI plays through a human-pace hand, Gemma roasts the round into Discord through a Nango tool call, and the same room with no humans is an open-model eval harness.
+**One line:** Word Hunt VS (Humans vs AI), on-policy distillation of frontier AI agents into tiny, task-specialized action models: humans on phones race an 11M-parameter model we trained today and Gemma 4 12B on one shared board; every AI plays through a human-pace hand, Gemma roasts the round into Discord through a Nango tool call, and the same room with no humans is an open-model eval harness.
 
 **Sponsor tools used and how:**
 - **Gemma 4 (Google DeepMind):** 12B-it as a live seat (text grid vs screenshot vs thinking-on compared on 20 boards; thinking off in-match), as the teacher for the nano's between-round learner, and as the commentator that function-calls Nango at the buzzer.
