@@ -4,16 +4,21 @@
 
 Cloud Agents do **not** load project `.cursor/mcp.json`. That file is for the Cursor IDE and CLI only.
 
-To use Lambda Cloud (`https://cloud.lambda.ai/`) from a Cloud Agent:
+Personal Cursor accounts have **no** Dashboard → Integrations page. Team Integrations is team-admin only.
 
-1. Open [cursor.com/agents](https://cursor.com/agents) and add a personal MCP, or on a Team plan add it under [Dashboard → Integrations & MCP](https://cursor.com/dashboard/integrations).
-2. Create a custom **stdio** server (HTTP/SSE/`mcp-remote` are not supported for this package):
+### Optional: attach Lambda as a Cloud Agent MCP
+
+Do this on the **website**, not in the desktop Agents window (the desktop composer does not have this control).
+
+1. Open [cursor.com/agents](https://cursor.com/agents) in a browser.
+2. Click the **+** button to the **left of the prompt bar** (next to the model picker). It is labeled for files, skills, and MCP servers.
+3. Hover **MCP Servers** → **Add MCP**.
+4. Add a custom server:
    - Name: `lambda`
-   - Command: `npx`
-   - Args: `-y` `@strand-ai/lambda-mcp`
-   - Env: `LAMBDA_API_KEY` = a key from [cloud.lambda.ai/api-keys/cloud-api](https://cloud.lambda.ai/api-keys/cloud-api)
-3. Enable `lambda` for this environment before starting a new Cloud Agent.
+   - If the form offers **stdio** / Command: `npx`, args `-y` `@strand-ai/lambda-mcp`, env `LAMBDA_API_KEY` = the Cloud Agent secret
+   - If the form only offers **HTTP URL**: skip MCP. There is no official Lambda HTTP MCP. Use the skill below instead.
+5. Enable `lambda` for new runs. This existing agent cannot pick it up mid-run.
 
-`npx` is available in this environment. The unofficial MCP talks to `https://cloud.lambda.ai/api/v1`.
+### Lambda Cloud without MCP
 
-Once connected, the agent can call `list_gpu_types`, `check_availability`, `list_running_instances`, `start_instance`, `stop_instance`, and filesystem tools.
+`LAMBDA_API_KEY` is already an environment secret. Follow `.cursor/skills/lambda-cloud/SKILL.md` and call `https://cloud.lambda.ai/api/v1` directly. Always send a non-default `User-Agent` (Python urllib is blocked by Cloudflare 1010).
