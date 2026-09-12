@@ -18,6 +18,7 @@ from .solver import Solver
 
 COUNTDOWN_S = float(os.environ.get("WH_COUNTDOWN_S", 20.0))
 RACE_S = float(os.environ.get("WH_RACE_S", 75.0))
+INTEGRATIONS = os.environ.get("WH_INTEGRATIONS") == "1"
 TICKER_MAX = 60
 MAX_HUMANS = int(os.environ.get("WH_MAX_HUMANS", 24))
 COLORS = ["#ff5d5d", "#4da3ff", "#ffc93c", "#42d392", "#c77dff", "#ff9f43", "#2ec4b6", "#f368e0"]
@@ -68,6 +69,17 @@ def new_code(rng: random.Random) -> str:
     return "".join(rng.choice(alphabet) for _ in range(4))
 
 
+def _emit(event: str, room: "Room") -> None:  # fire-and-forget to integrations/ (Discord via Nango); never raises
+    if not INTEGRATIONS:
+        return
+    try:
+        from integrations.events import emit
+        from integrations.handlers import from_room
+        emit(event, from_room(room))
+    except Exception as e:  # noqa: BLE001
+        __import__("logging").getLogger("wordhunt.room").warning("integrations %s failed: %s", event, e)
+
+
 class Room:
     def __init__(self, code: str, solver: Solver, rng: random.Random | None = None):
         self.code = code
@@ -92,6 +104,7 @@ class Room:
         for spec in registry.catalog():
             if spec.default and spec.available:
                 self.add_from_catalog(spec.id)
+        _emit("room_created", self)
 
     # ---- seats -------------------------------------------------------------------------------
     def _color(self) -> str:
@@ -293,6 +306,7 @@ class Room:
             if s.hand:
                 await s.hand.start_round(self.board, self.words, start)
         await self.send_state()
+        _emit("round_started", self)
 
         period = 0.05
         while self.now() < self.phase_ends_at:
@@ -310,6 +324,7 @@ class Room:
             s.cursor_path = []
         self.results = self._compute_results()
         await self.send_state()
+        _emit("round_ended", self)
 
     def _next_board(self) -> tuple[str, dict[str, list[int]]]:
         """Packed boards first (stage-safe, known long words), random live boards after."""

@@ -13,6 +13,7 @@ RUN mkdir -p data \
  && wc -l data/enable1.txt data/common-30k.txt
 
 COPY wordhunt ./wordhunt
+COPY integrations ./integrations
 COPY static ./static
 COPY data/*.json ./data/
 
