@@ -26,12 +26,24 @@ except ImportError:  # pragma: no cover
 
 WORD_RE = re.compile(r"[A-Za-z]{3,8}")
 
-PROMPT = """You are playing Word Hunt on a 4x4 letter board.
-Rules: words have 3-8 letters, use adjacent tiles (8 directions, diagonals allowed), never reuse a tile.
-Board (rows top to bottom):
-{grid}
-{found_line}{bad_line}List up to {n} valid English words you can trace on this board, most confident first.
-Output ONLY the words, uppercase, one per line, no numbering, no commentary."""
+# Same system/user prompt as gemma_seat/client.py (text-grid seat), plus the room's found/rejected feedback.
+SYSTEM_PROMPT = (
+    "You are playing Word Hunt, a 4x4 letter-grid word game.\n"
+    "Rules: a word is spelled by a path of adjacent tiles (horizontal, vertical or "
+    "diagonal neighbours). Each tile may be used at most once per word. Words must "
+    "have at least 3 letters and be ordinary English dictionary words (no proper "
+    "nouns, no abbreviations). Longer words score far more: 3 letters=100, 4=400, "
+    "5=800, 6=1400, 7+=1800.\n"
+    "Answer with the words only, one per line, UPPERCASE, longest first. "
+    "Each word exactly once; never repeat a word. When you run out of words, stop. "
+    "No numbering, no commentary, no explanations."
+)
+PROMPT = (
+    "Here is the 4x4 grid (rows top to bottom, letters left to right):\n\n{grid}\n\n"
+    "{found_line}{bad_line}"
+    "List every valid word you can find on this grid, following the adjacency and "
+    "no-reuse rules. Aim for up to {n} words. Words only, one per line."
+)
 
 
 class GemmaPolicy(WordQueuePolicy):
@@ -39,7 +51,7 @@ class GemmaPolicy(WordQueuePolicy):
 
     def __init__(self, base_url: str, model: str, api_key: str = "", rng: random.Random | None = None,
                  words_per_call: int = 10, max_calls: int = 12, thinking: bool = False, timeout: float = 30.0,
-                 temperature: float = 0.7, max_tokens: int = 200):
+                 temperature: float = 0.2, max_tokens: int = 200):
         super().__init__(rng)
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -131,7 +143,8 @@ class GemmaPolicy(WordQueuePolicy):
         bad_line = f"Rejected as not on the board or not words: {', '.join(self._bad[-10:])}\n" if self._bad else ""
         body = {
             "model": self.model,
-            "messages": [{"role": "user", "content": PROMPT.format(grid=grid, found_line=found_line, bad_line=bad_line, n=self.words_per_call)}],
+            "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                         {"role": "user", "content": PROMPT.format(grid=grid, found_line=found_line, bad_line=bad_line, n=self.words_per_call)}],
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "chat_template_kwargs": {"enable_thinking": self.thinking},
