@@ -1,4 +1,4 @@
-# Word Hunt arena: nano is the hero
+# Word Hunt VS (humans vs. models): nano is the hero
 
 Open Model Hack, San Francisco, 2026-09-12. Full plan: [PLAN.md](PLAN.md).
 

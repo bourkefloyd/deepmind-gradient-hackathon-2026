@@ -18,7 +18,7 @@ INDEX = os.path.join(STATIC_DIR, "index.html")
 ROOM_TTL_S = 3 * 3600
 NAME_RE = re.compile(r"[^\w \-\.]+")
 
-app = FastAPI(title="Word Hunt arena")
+app = FastAPI(title="Word Hunt VS")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 rooms: dict[str, Room] = {}
