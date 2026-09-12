@@ -64,6 +64,9 @@ input.code{text-transform:uppercase;letter-spacing:6px;font-weight:700;text-alig
 .hud .timer.low{color:var(--bad)}
 .hud .score{font-size:24px;font-weight:700;color:var(--me);min-width:56px;text-align:right}
 .hud .word{font-size:clamp(22px,7vw,30px);font-weight:800;letter-spacing:2px;min-height:34px;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.theme{text-align:center;font-weight:700;color:var(--gold);font-size:clamp(15px,4.5vw,20px);letter-spacing:.5px;margin:0 0 8px;min-height:0}
+.theme:empty{display:none}
+.sp-left .theme{font-size:clamp(18px,1.6vw,44px)}
 .boardwrap{position:relative;width:100%;aspect-ratio:1;max-width:min(100%,70vh,70dvh);margin:0 auto;touch-action:none}
 .board{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(6px,2vw,10px);width:100%;height:100%;touch-action:none}
 .tile{background:var(--tile);color:var(--tile-ink);border-radius:clamp(10px,3.5vw,16px);display:flex;align-items:center;justify-content:center;font-size:clamp(30px,11vw,56px);line-height:1;min-height:0;font-weight:800;text-transform:uppercase;box-shadow:inset 0 -4px 0 rgba(0,0,0,.15);position:relative;cursor:pointer}
@@ -242,6 +245,8 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
       <div class="word" id="curWord"></div>
       <div class="score" id="myScore">0</div>
     </div>
+    <!-- slot for the levels worker: round theme title, e.g. "Round 2 · Animals" (hidden while empty) -->
+    <div class="theme" id="themeTitle"></div>
     <div class="boardwrap" id="boardwrap">
       <div class="board" id="board"></div>
       <svg class="paths" id="paths"></svg>
@@ -284,7 +289,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
     <div class="sp-join"><div class="join"><div class="lbl">Join at</div><span id="spJoin"></span><b id="spCode"></b></div><img id="spQr" alt="QR to join"></div>
   </div>
   <div class="sp-main">
-    <div class="sp-left"><div class="sp-big" id="spBig"></div><div id="spBoardSlot" style="width:100%;display:flex;justify-content:center"></div><div class="small" id="spNote"></div></div>
+    <div class="sp-left"><div class="sp-big" id="spBig"></div><div class="theme" id="spThemeTitle"></div><div id="spBoardSlot" style="width:100%;display:flex;justify-content:center"></div><div class="small" id="spNote"></div></div>
     <div class="sp-right"><div class="seats" id="spSeats"></div><div id="spTickerSlot" style="flex:1;min-height:0;display:flex"></div></div>
   </div>
 </section>
