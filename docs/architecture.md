@@ -367,9 +367,16 @@ pattern as `nango-secret-key`); `RESPAN_ENABLED=0` skips it.
 | `proxy` | request goes to `POST <RESPAN_BASE_URL>/chat/completions` with `Authorization: Bearer <RESPAN_API_KEY>`, the upstream Gemma model name (or `RESPAN_MODEL`), the tags above, and — when the upstream is not loopback — `credential_override: {model: {api_base, api_key}}` pointing at our endpoint. Respan also supports registering the endpoint once as a **custom provider + custom model** (Providers → Add Custom Provider; Models → create; or `POST /api/providers/`, `POST /api/models/`). | Lambda vLLM (public IP) or a tunnelled Mac. Verified 2026-09-12: gateway auth + tagging work and even failed attempts are logged as spans; a custom provider/model created via API (`wordhunt-gemma` / `gemma-4-12b-it`) was still answered `404 not available in the model list` by the gateway within the test window, so proxy mode to our own Gemma is **not yet confirmed end-to-end** — re-test after creating the provider/model in the UI (`scripts/respan_smoke.py --model gemma-4-12b-it`). |
 | `log` | call Gemma directly (unchanged), then a daemon thread POSTs the finished call to `<RESPAN_BASE_URL>/request-logs/create/` with the same tags ("log without proxying" in Respan's custom-provider docs). | **This is the path that produced real traces today**: `scripts/respan_smoke.py --mode log` returned `201` with `unique_id`s for all three callers and they read back from `GET /api/request-logs/list/`. Works for Gemma on the Mac at `localhost:8080` (Respan's cloud cannot reach it) and needs no model registration. Set `RESPAN_MODE=log` on the Mac and on Cloud Run until proxy mode is confirmed. |
 
-Screenshot placeholder: `docs/respan-trace.png` — Respan Logs page filtered to
-`custom_identifier = gemma-seat` showing the span waterfall (to be captured from Bourke's
-dashboard; the API key alone cannot render the UI).
+![Respan Logs page: spans from nano-vs-gemma-eval, commentator and gemma-seat with customer IDs wordhunt-vs/...](respan-logs.png)
+
+*Respan Logs (Bourke's dashboard, 2026-09-12 14:33 PT): one span per Gemma call, tagged per caller
+(`Span name` / `Custom ID` = `nano-vs-gemma-eval`, `commentator`, `gemma-seat`; `Customer ID` =
+`wordhunt-vs/<caller>`; `Thread ID` = caller:room). Sent via log mode. The untagged rows are the
+proxy-mode probes the gateway rejected (401/404) — it logs failed attempts too.*
+
+Span count per Custom ID from `GET /api/request-logs/list/` at 21:45 UTC: `gemma-seat` 2,
+`commentator` 2 (+5 under per-run ids `commentator-<run>` from the proxy smoke), `nano-vs-gemma-eval` 1,
+untagged gateway probes 7 — 17 spans total.
 
 **Verification.** `python -m unittest integrations.test_respan` (17 tests, mock gateway: headers,
 model, tags, override, disabled passthrough, both modes for all three callers);
