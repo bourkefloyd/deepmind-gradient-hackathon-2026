@@ -17,6 +17,7 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 INDEX = os.path.join(STATIC_DIR, "index.html")
 ROOM_TTL_S = 3 * 3600
 NAME_RE = re.compile(r"[^\w \-\.]+")
+CODE_RE = re.compile(r"^[A-Z0-9]{4}$")
 
 app = FastAPI(title="Word Hunt VS")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -105,6 +106,13 @@ async def ws_room(ws: WebSocket, code: str):
     code = code.upper()
     room = rooms.get(code)
     await ws.accept()
+    if room is None and CODE_RE.match(code):
+        # Unknown but well-formed code (typically a link shared before a deploy reset the rooms):
+        # recreate a fresh lobby under the same code so the shared link keeps working.
+        gc_rooms()
+        room = Room(code, get_solver(), random.Random(_rng.random()))
+        room.recreated = True
+        rooms[code] = room
     if room is None:
         await ws.send_json({"type": "error", "error": "no such room", "code": code, "reason": "not_found", "fatal": True})
         await ws.close()

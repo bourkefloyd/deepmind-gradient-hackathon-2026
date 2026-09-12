@@ -99,6 +99,7 @@ class Room:
         self._lock = asyncio.Lock()
         self.results: list[dict] = []
         self.spectators: set[Any] = set()
+        self.recreated = False          # lobby re-made under a shared code after a deploy reset
         self.perf = {"broadcast_ms_max": 0.0, "broadcast_ms_last": 0.0, "tick_late_ms_max": 0.0}
         self._boards = load_packed_boards()
         self.rng.shuffle(self._boards)
@@ -215,6 +216,7 @@ class Room:
             "results": self.results if reveal else [],
             "catalog": [c.public() for c in registry.catalog()],
             "spectators": len(self.spectators),
+            "recreated": self.recreated,
         }
 
     async def broadcast(self, msg: dict) -> None:
