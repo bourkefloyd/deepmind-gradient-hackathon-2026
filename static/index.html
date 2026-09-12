@@ -135,7 +135,33 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .lb .best b{color:var(--ink);font-weight:700}
 .lb .score{grid-row:1/span 2;grid-column:4;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
 .lb .medal{grid-row:1/span 2}.lb .av{grid-row:1/span 2}
+/* per-seat mini boards (desktop only) + big finds */
+.minis{display:none;grid-template-columns:1fr 1fr;gap:8px;align-content:start}
+.mini{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;min-width:0}
+.mini .mh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:5px;margin-bottom:6px}
+.mini .mh .nm{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .mh .nm .badge{display:none}
+.mini .mh .score{font-weight:800;font-size:12px;font-variant-numeric:tabular-nums}
+.mini .mh .av{width:22px;height:22px;font-size:11px;border-width:1.5px}
+.mini .mh .medal{display:none}
+.mini .mb{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;aspect-ratio:1}
+.mini .mt{background:var(--tile);color:var(--tile-ink);border-radius:5px;display:grid;place-items:center;font-weight:800;font-size:12px;text-transform:uppercase;transition:background .1s,color .1s}
+.mini .mt.on{background:var(--blue);color:#fff}
+.mini .mt.tip{box-shadow:0 0 0 2px #fff inset}
+.mini .mw{margin-top:6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:14px}
+.mini .mw b{color:var(--ink)}
+.big{display:flex;flex-direction:column;gap:5px}
+.big .bf{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px solid rgba(28,42,71,.6)}
+.big .bf:last-child{border-bottom:0}
+.big .bf .av{width:22px;height:22px;font-size:11px;border-width:1.5px}
+.big .bf .who{color:var(--muted);flex:none}
+.big .bf b{flex:1;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.big .bf .pts{color:var(--accent);font-weight:800;font-variant-numeric:tabular-nums}
+.big .bf .ts{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.big .none{color:var(--muted);font-size:12px;text-align:center;padding:4px}
+.card.bigcard{display:none}
 /* game feed */
+.ticker .think .msg{color:var(--muted);font-style:italic}
 .feedwrap{display:flex;flex-direction:column;min-height:0}
 .ticker{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 10px;font-size:13.5px;max-height:190px;overflow:auto;font-variant-numeric:tabular-nums;-webkit-user-select:text;user-select:text}
 .ticker .tk{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid rgba(28,42,71,.6)}
@@ -237,6 +263,13 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   .scores .lb{padding:10px 12px}
   .lb .nm{font-size:15px}.lb .score{font-size:19px}
   .play-side .ticker{max-height:calc(100vh - 560px);min-height:160px}
+  .card.bigcard{display:block}
+}
+@media (min-width:1200px){
+  #play{max-width:1440px}
+  #play.on{grid-template-columns:300px minmax(0,1fr) 380px}
+  .minis{display:grid}
+  .play-side .ticker{max-height:calc(100vh - 760px);min-height:140px}
   #results{max-width:1040px}
   #results.on{grid-template-columns:minmax(0,380px) minmax(0,1fr)}
   .rgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -293,6 +326,9 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .sp-right .ticker .tk .av{width:clamp(26px,1.8vw,50px);height:clamp(26px,1.8vw,50px);font-size:clamp(13px,.9vw,26px)}
 .sp-right .words{width:100%;font-size:clamp(13px,.9vw,24px);color:var(--muted);text-transform:uppercase;line-height:1.6}
 .sp-right .words b{color:var(--ink)}
+.sp-right .bigcard{display:block;margin:0;padding:clamp(8px,.8vw,20px) clamp(10px,1vw,26px)}
+.sp-right .big .bf{font-size:clamp(13px,.95vw,26px)}
+.sp-right .big .bf .av{width:clamp(22px,1.5vw,40px);height:clamp(22px,1.5vw,40px);font-size:clamp(11px,.8vw,20px)}
 @media (max-width:820px){.sp-main{grid-template-columns:1fr}.sp-right .ticker{max-height:200px}.sp-top{flex-direction:column;align-items:flex-start}}
 </style>
 </head>
@@ -356,6 +392,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 </section>
 
 <section id="play" class="screen">
+  <div class="col minis" id="minis"></div>
   <div class="col play-main">
     <div class="strip">
       <div class="info"><b>Round <span id="playRound">1</span></b><span class="hint">Find as many words as you can!</span></div>
@@ -386,6 +423,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   </div>
   <div class="col play-side">
     <div class="card"><div class="card-h"><span>🏆 Leaderboard</span><span class="live on r"><i></i>Live</span></div><div class="scores" id="playSeats"></div></div>
+    <div class="card bigcard"><div class="card-h"><span>⚡ Recent Big Finds</span><span class="r">400+</span></div><div class="big" id="bigFinds"></div></div>
     <div class="card feedwrap"><div class="card-h"><span>💬 Game Feed</span><span class="r" id="feedCount"></span></div><div class="ticker" id="ticker"></div></div>
   </div>
 </section>
@@ -424,7 +462,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
       <div class="boardcard" id="spBoardSlot" style="display:flex;justify-content:center"></div>
       <div class="small" id="spNote"></div>
     </div>
-    <div class="sp-right"><div class="side-title">🏆 Live leaderboard</div><div class="scores" id="spSeats"></div><div class="side-title" id="spFeedTitle">💬 Game feed</div><div id="spTickerSlot" style="flex:1;min-height:0;display:flex"></div></div>
+    <div class="sp-right"><div class="side-title">🏆 Live leaderboard</div><div class="scores" id="spSeats"></div><div class="card bigcard hidden" id="spBigCard"><div class="card-h"><span>⚡ Recent Big Finds</span><span class="r">400+</span></div><div class="big" id="spBigFinds"></div></div><div class="side-title" id="spFeedTitle">💬 Game feed</div><div id="spTickerSlot" style="flex:1;min-height:0;display:flex"></div></div>
   </div>
 </section>
 
@@ -441,7 +479,8 @@ for(const el of document.querySelectorAll('#nameEdit,#nameEdit2')){el.textConten
 
 // ---------- state ----------
 const $=id=>document.getElementById(id);
-let ws=null,CODE=null,S=null,offset=0,myPath=[],myWords=[],cursors={},reconnectT=null,lastTickerLen=0,BEST={},feedN=0;
+let ws=null,CODE=null,S=null,offset=0,myPath=[],myWords=[],cursors={},reconnectT=null,lastTickerLen=0,BEST={},feedN=0,BIG=[],THINK={},SEEN=new Set();
+const BIG_MIN=400;
 const SPECT=/^\/s\//.test(location.pathname);const ME=SPECT?'__spectator__':PID;
 if(SPECT)document.body.classList.add('spect');
 const NEIGH=[];for(let i=0;i<16;i++){const r=i>>2,c=i&3,n=[];for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const rr=r+dr,cc=c+dc;if(rr>=0&&rr<4&&cc>=0&&cc<4)n.push(rr*4+cc)}NEIGH.push(n)}
@@ -477,7 +516,7 @@ function onMsg(m){
   if(m.type==='error'){if(m.fatal){CODE=null;if(ws){ws.onclose=null}history.pushState({},'','/');const b=$('homeBanner');b.classList.remove('hidden');b.textContent=m.reason==='full'?`Room ${m.code||''} is full (${S&&S.max_humans||24} players). Create a new room?`:`Room ${m.code||''} not found — it may have expired, the server restarted (a deploy resets rooms), or this link points at a different build. Create a new room?`;S=null;show('home')}else{$('homeErr').textContent=m.error}return}
   if(m.type==='welcome'){return}
   if(m.type==='state'){const prev=S;S=m;offset=m.now-Date.now()/1000;render(prev);return}
-  if(m.type==='cursors'){for(const k in m.cursors){cursors[k]=m.cursors[k]}drawOthers();return}
+  if(m.type==='cursors'){for(const k in m.cursors){cursors[k]=m.cursors[k];noteThinking(k,m.cursors[k])}drawOthers();return}
   if(m.type==='tick'){if(!SPECT&&m.entry.seat_id===ME)return;addTick(m.entry,true);const s=S&&S.seats.find(x=>x.seat_id===m.entry.seat_id);if(s&&m.entry.ok){s.score+=m.entry.delta;s.n_words=(s.n_words||0)+1}if(SPECT)renderSpSeats();else renderScores();return}
   if(m.type==='mine'){onMine(m);return}
 }
@@ -498,7 +537,7 @@ function render(prev){
   if(SPECT){renderSpect(prev,changed);return}
   if(st==='lobby'){show('lobby');const join=location.origin+'/r/'+S.code;$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=join;$('lobbyQr').src=QR(join,264);$('lobbySpect').textContent=location.origin+'/s/'+S.code;const h=isHost();$('lobbyCount').textContent=S.seats.length+' seated';$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false,h)).join('');$('lobbySeats').classList.toggle('many',S.seats.length>8);for(const b of $('lobbySeats').querySelectorAll('[data-rm]'))b.onclick=()=>send({type:'remove_seat',seat_id:b.dataset.rm});$('addSeat').classList.toggle('hidden',!h);const sel=$('seatSel');const cur=sel.value;sel.innerHTML=(S.catalog||[]).filter(c=>c.available).map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.label)}</option>`).join('');if(cur)sel.value=cur;$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h);$('lobbyNotice').classList.toggle('hidden',!S.recreated);if(S.recreated)$('lobbyNotice').textContent=`Room ${S.code} was reset by a server update — new lobby, same link`}
   else if(st==='countdown'){show('countdown');$('cdRound').textContent=S.round;$('cdSeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('');$('cdSeats').classList.toggle('many',S.seats.length>8)}
-  else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};BEST={};feedN=0;$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers()}show('play');$('playRound').textContent=S.round;$('nPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';const me=mySeat();$('hudWho').innerHTML=me?`${avatar(me)}<span>${esc(me.name)}</span>`:'';const q=!!(me&&me.queued);$('banner').classList.toggle('hidden',!q);if(q)$('banner').textContent="You're in for the next round — this race already started. Watch the board; Rematch seats you.";$('btnSubmit').disabled=q;$('btnClear').disabled=q;for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;if(changed&&me){for(const e of S.ticker)if(e.seat_id===ME&&e.ok)myWords.push([e.word,e.delta,e.t])}renderMine();renderScores();drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
+  else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers();buildMinis();renderBig()}show('play');if(!changed&&$('minis').children.length!==S.seats.filter(s=>s.seat_id!==ME&&!s.queued).length)buildMinis();$('playRound').textContent=S.round;$('nPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';const me=mySeat();$('hudWho').innerHTML=me?`${avatar(me)}<span>${esc(me.name)}</span>`:'';const q=!!(me&&me.queued);$('banner').classList.toggle('hidden',!q);if(q)$('banner').textContent="You're in for the next round — this race already started. Watch the board; Rematch seats you.";$('btnSubmit').disabled=q;$('btnClear').disabled=q;for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;if(changed&&me){for(const e of S.ticker)if(e.seat_id===ME&&e.ok)myWords.push([e.word,e.delta,e.t])}renderMine();renderScores();drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
   else if(st==='results'){show('results');$('resRound').textContent=S.round;buildBoard($('resBoard'),S.board,false);const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const many=seats.length>8;$('resCount').textContent=seats.length+' players';$('resSeats').classList.toggle('few',seats.length<=3);
     $('resSeats').innerHTML=seats.map((s,i)=>{const w=s.words||[];const best=w[0];const others=w.slice(1,many?3:5);const more=w.length-1-others.length;return `<div class="rcard${i===0?' first':''}${s.seat_id===ME?' me':''}">${i===0?'<span class="crown">👑</span>':''}${medal(i)}${avatar(s)}<div class="nm">${esc(s.name)}</div><div>${badge(s)}</div><div class="rscore">${fmtN(s.score)}</div><div class="rw">${w.length} word${w.length===1?'':'s'}</div>${best?`<div class="bestbox"><small>Best word</small><b>${esc(best[0])}</b><span>(${fmtN(best[1])})</span></div>`:'<div class="bestbox"><small>No words yet</small><b>—</b></div>'}${others.length?`<div class="others"><small>Other words</small><div class="chips">${others.map(([w])=>`<span class="chip">${esc(w)}</span>`).join('')}${more>0?`<span class="chip more">+${more}</span>`:''}</div></div>`:''}</div>`}).join('');
     const r=S.results&&S.results[0];if(r){$('resN').textContent=fmtN(r.n_board_words);$('resMax').textContent=fmtN(r.max_score);$('resBest').innerHTML=r.best_words.slice(0,6).map(w=>`<div class="lw">${esc(w.toUpperCase())}<span>${w.length}</span></div>`).join('')}
@@ -513,9 +552,10 @@ function renderSpect(prev,changed){show('spect');const st=S.state;$('spCode').te
   const slot=$('spBoardSlot');if(!slot.contains($('boardwrap'))){slot.appendChild($('boardwrap'));$('spTickerSlot').appendChild($('ticker'))}
   const showBoard=st==='playing'||st==='results';$('boardwrap').classList.toggle('hidden',!showBoard);slot.classList.toggle('hidden',!showBoard);$('ticker').classList.toggle('hidden',!showBoard);$('spFeedTitle').classList.toggle('hidden',!showBoard);
   $('spStats').classList.toggle('hidden',st!=='playing');$('spBig').classList.toggle('hidden',st==='playing');$('spPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';$('spRoundN').textContent=S.round;
+  if(st!=='playing'&&st!=='results')$('spBigCard').classList.add('hidden');
   if(st==='lobby'){$('spBig').textContent='Waiting';$('spBig').classList.remove('low');$('spNote').textContent='Scan to join. The host presses Start.'}
   else if(st==='countdown'){$('spBig').textContent=Math.ceil(Math.max(0,S.phase_ends_at-now()));$('spBig').classList.remove('low');$('spNote').textContent='Round '+S.round+' starts in'}
-  else if(st==='playing'){if(changed){cursors={};BEST={};feedN=0;$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,false);buildFingers()}$('spNote').textContent='Round '+S.round+' · humans vs. models';for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;drawOthers();requestAnimationFrame(drawOthers)}
+  else if(st==='playing'){if(changed){cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,false);buildFingers();renderBig()}$('spBigCard').classList.remove('hidden');$('spNote').textContent='Round '+S.round+' · humans vs. models';for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;drawOthers();requestAnimationFrame(drawOthers)}
   else if(st==='results'){$('spBig').textContent='Final';$('spBig').classList.remove('low');const r=S.results&&S.results[0];$('spNote').textContent=r?(fmtN(r.n_board_words)+' words possible · longest: '+r.best_words.slice(0,4).join(', ').toUpperCase()):'';for(const f of $('fingers').children)f.classList.remove('on');$('paths').innerHTML=''}
   renderSpSeats()}
 
@@ -554,15 +594,27 @@ function tileCenter(i){const wrap=$('boardwrap').getBoundingClientRect();const t
 function buildFingers(){const f=$('fingers');f.innerHTML='';for(const s of S.seats){if(s.seat_id===ME)continue;const d=document.createElement('div');d.className='finger';d.id='f_'+cssId(s.seat_id);d.style.background=s.color;d.textContent=s.name[0]||'?';f.appendChild(d)}}
 function cssId(s){return s.replace(/[^a-zA-Z0-9]/g,'_')}
 function layoutFingers(){drawOthers()}
-function drawOthers(){if(!S||S.state!=='playing')return;for(const s of S.seats){if(s.seat_id===ME)continue;const d=$('f_'+cssId(s.seat_id));if(!d)continue;const c=cursors[s.seat_id];if(c&&c.tile!=null){const [x,y]=tileCenter(c.tile);d.style.transform=`translate(${x}px,${y}px)`;d.classList.add('on');d.classList.remove('idle')}else if(d.style.transform){d.classList.add('on','idle')}else{d.classList.remove('on')}}drawPaths()}
+function drawOthers(){if(!S||S.state!=='playing')return;for(const s of S.seats){if(s.seat_id===ME)continue;const d=$('f_'+cssId(s.seat_id));if(!d)continue;const c=cursors[s.seat_id];if(c&&c.tile!=null){const [x,y]=tileCenter(c.tile);d.style.transform=`translate(${x}px,${y}px)`;d.classList.add('on');d.classList.remove('idle')}else if(d.style.transform){d.classList.add('on','idle')}else{d.classList.remove('on')}}drawPaths();drawMinis()}
+// ---------- per-seat mini boards (desktop >=1200px): every other seat's live path on its own tiny board ----------
+function buildMinis(){const m=$('minis');if(!m)return;m.innerHTML='';for(const s of S.seats){if(s.seat_id===ME||s.queued)continue;const d=document.createElement('div');d.className='mini';d.id='mini_'+cssId(s.seat_id);d.innerHTML=`<div class="mh"><span class="medal">·</span>${avatar(s)}<span class="nm">${esc(s.name)}${badge({...s,seat_id:''})}</span><span class="score">${fmtN(s.score)}</span></div><div class="mb">${[...S.board].map(ch=>`<span class="mt">${ch}</span>`).join('')}</div><div class="mw"></div>`;m.appendChild(d)}}
+function drawMinis(){const m=$('minis');if(!m||!m.children.length||!m.offsetParent)return;const order=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score).map(s=>s.seat_id);
+  for(const s of S.seats){const d=$('mini_'+cssId(s.seat_id));if(!d)continue;const p=(cursors[s.seat_id]||{}).path||[];const tiles=d.querySelectorAll('.mt');for(let i=0;i<16;i++){tiles[i].classList.toggle('on',p.includes(i));tiles[i].classList.toggle('tip',p[p.length-1]===i)}
+    d.querySelector('.score').textContent=fmtN(s.score);const r=order.indexOf(s.seat_id);d.querySelector('.medal').textContent=r<0?'·':r+1;d.querySelector('.medal').className='medal '+(r>=0&&r<3?'m'+(r+1):'');const w=d.querySelector('.mw');w.innerHTML=p.length>=2?`building <b>${p.map(i=>S.board[i]).join('').toUpperCase()}</b>`:bestLine(s,false)}}
+// ---------- recent big finds (>= BIG_MIN) ----------
+function noteBig(e){if(!e.ok||e.delta<BIG_MIN)return;BIG.unshift(e);if(BIG.length>6)BIG.length=6;renderBig()}
+function renderBig(){for(const id of ['bigFinds','spBigFinds']){const el=$(id);if(!el)continue;el.innerHTML=BIG.length?BIG.map(e=>{const s=S.seats.find(x=>x.seat_id===e.seat_id);return `<div class="bf"><span class="av ${s&&s.kind==='ai'?'ai':'hu'}" style="border-color:${e.color}">${s&&s.kind==='ai'?'🤖':'🧑'}</span><span class="who" style="color:${e.color}">${esc(e.name)}</span><b class="${e.masked?'m':''}">${esc(e.word)}</b><span class="pts">+${fmtN(e.delta)}</span><span class="ts">${e.t!=null?fmtAt(e.t):''}</span></div>`}).join(''):'<div class="none">No 400+ words yet — go long!</div>'}}
+// ---------- bot "thinking" lines: an AI hand tracing 3+ tiles gets one masked feed line per attempt ----------
+function noteThinking(sid,c){if(!S||S.state!=='playing')return;const s=S.seats.find(x=>x.seat_id===sid);if(!s||s.kind!=='ai')return;const p=(c&&c.path)||[];const st=THINK[sid]||(THINK[sid]={said:false});
+  if(p.length<=1){st.said=false;return}
+  if(p.length>=3&&!st.said){st.said=true;const w=p.map(i=>S.board[i]).join('').toUpperCase();const t=S.race_s-(S.phase_ends_at-now());addTick({seat_id:sid,name:s.name,color:s.color,word:w.slice(0,2)+'_'.repeat(w.length-2),masked:true,think:true,t},true)}}
 function drawPaths(){const svg=$('paths');if(!S||!$('board').children.length)return;let h='';for(const s of S.seats){const p=s.seat_id===ME?myPath:(cursors[s.seat_id]||{}).path;if(!p||p.length<2)continue;const pts=p.map(i=>tileCenter(i).join(',')).join(' ');h+=`<polyline points="${pts}" fill="none" stroke="${s.seat_id===ME?'#fff':s.color}" stroke-width="${s.seat_id===ME?5:6}" stroke-opacity="${s.seat_id===ME?.9:.55}" stroke-linecap="round" stroke-linejoin="round"/>`}svg.innerHTML=h}
 window.addEventListener('resize',()=>requestAnimationFrame(drawOthers));
 
 // ---------- game feed ----------
-function addTick(e,prepend){noteBest(e);const t=$('ticker');const s=S&&S.seats.find(x=>x.seat_id===e.seat_id);const kind=s?s.kind:'human';const d=document.createElement('div');d.className='tk'+(e.ok?'':' miss');
-  const msg=e.ok?`✨ Found <b class="${e.masked?'m':''}">${esc(e.word)}</b><span class="pts">+${fmtN(e.delta)}</span>`:`Tried <b class="${e.masked?'m':''}">${esc(e.word)}</b> · ${e.reason==='dup'?'already found':e.reason==='closed'?'too late':'not a word'}`;
+function addTick(e,prepend){if(!e.think){const k=e.seat_id+'|'+e.word+'|'+e.t+'|'+e.ok;if(SEEN.has(k))return;SEEN.add(k);noteBest(e);noteBig(e)}const t=$('ticker');const s=S&&S.seats.find(x=>x.seat_id===e.seat_id);const kind=s?s.kind:'human';const d=document.createElement('div');d.className='tk'+(e.think?' think':e.ok?'':' miss');
+  const msg=e.think?`🤔 Thinking… <b class="m">${esc(e.word)}</b>?`:e.ok?`✨ Found <b class="${e.masked?'m':''}">${esc(e.word)}</b><span class="pts">+${fmtN(e.delta)}</span>`:`Tried <b class="${e.masked?'m':''}">${esc(e.word)}</b> · ${e.reason==='dup'?'already found':e.reason==='closed'?'too late':'not a word'}`;
   d.innerHTML=`<span class="av ${kind==='ai'?'ai':'hu'}" style="border-color:${e.color}">${kind==='ai'?'🤖':'🧑'}</span><div class="body"><div class="top"><span class="who" style="color:${e.color}">${esc(e.name)}</span>${s?badge({...s,seat_id:''}):''}<span class="ts">${e.t!=null?fmtAt(e.t):''}</span></div><div class="msg">${msg}</div></div>`;
-  t.prepend(d);while(t.children.length>60)t.lastChild.remove();feedN++;const fc=$('feedCount');if(fc)fc.textContent=feedN+' events'}
+  t.prepend(d);while(t.children.length>60)t.lastChild.remove();if(!e.think){feedN++;const fc=$('feedCount');if(fc)fc.textContent=feedN+' events'}}
 
 // ---------- buttons ----------
 $('btnCreate').onclick=createRoom;$('btnJoin').onclick=()=>joinRoom($('joinCode').value);$('joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')joinRoom($('joinCode').value)});
