@@ -101,9 +101,8 @@ class Room:
         self.perf = {"broadcast_ms_max": 0.0, "broadcast_ms_last": 0.0, "tick_late_ms_max": 0.0}
         self._boards = load_packed_boards()
         self.rng.shuffle(self._boards)
-        for spec in registry.catalog():
-            if spec.default and spec.available:
-                self.add_from_catalog(spec.id)
+        for spec in registry.lineup():
+            self.add_from_catalog(spec.id)
         _emit("room_created", self)
 
     # ---- seats -------------------------------------------------------------------------------

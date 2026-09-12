@@ -3,6 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
+# CPU-only torch via the extra index in requirements.txt keeps the image small.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -15,8 +16,9 @@ RUN mkdir -p data \
 COPY wordhunt ./wordhunt
 COPY integrations ./integrations
 COPY static ./static
+COPY nano ./nano
 COPY data/*.json ./data/
 
-ENV PORT=8080
+ENV PORT=8080 PYTHONUNBUFFERED=1
 EXPOSE 8080
 CMD exec uvicorn wordhunt.server:app --host 0.0.0.0 --port ${PORT} --ws-ping-interval 20 --ws-ping-timeout 20

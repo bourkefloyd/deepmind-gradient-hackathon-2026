@@ -48,10 +48,18 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudb
 # Env for the revision. '|' delimiter because GEMMA_MODELS is a comma list.
 #   GEMMA_BASE_URL (OpenAI-compatible, e.g. http://LAMBDA_IP:8000/v1), GEMMA_API_KEY, GEMMA_MODELS
 #   or GEMMA_SEATS (JSON list of {id,name,model,base_url,api_key,label}); NANO_CKPT for the nano seat.
+#   WH_SEATS (default lineup, e.g. "nano,reflex-a"), WH_NANO_TEMPERATURE, WH_NANO_THINK
+#   WH_INTEGRATIONS=1 mounts Secret Manager `nango-secret-key` as NANGO_SECRET_KEY and sets WH_PUBLIC_URL.
 ENV_VARS="WH_BUILD=$BUILD_LABEL"
-for v in GEMMA_BASE_URL GEMMA_API_KEY GEMMA_MODELS GEMMA_SEATS NANO_CKPT NANO_TEMPERATURE WH_MAX_HUMANS; do
+for v in GEMMA_BASE_URL GEMMA_API_KEY GEMMA_MODELS GEMMA_SEATS NANO_CKPT WH_NANO_TEMPERATURE WH_NANO_THINK WH_SEATS WH_MAX_HUMANS WH_INTEGRATIONS; do
   if [[ -n "${!v:-}" ]]; then ENV_VARS="$ENV_VARS|$v=${!v}"; fi
 done
+EXISTING_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)' 2>/dev/null || true)"
+SECRET_FLAGS=()
+if [[ "${WH_INTEGRATIONS:-0}" == "1" ]]; then
+  ENV_VARS="$ENV_VARS|WH_PUBLIC_URL=${WH_PUBLIC_URL:-$EXISTING_URL}"
+  SECRET_FLAGS=(--update-secrets "NANGO_SECRET_KEY=${NANGO_SECRET_NAME:-nango-secret-key}:latest")
+fi
 
 SOURCE_FLAGS=(--source .)
 if [[ "$DEPLOY_MODE" == "image" ]]; then
@@ -72,7 +80,8 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
   BUILD_DIR="$(mktemp -d)"
   trap 'rm -rf "$BUILD_DIR" ${KEY_FILE:-}' EXIT
   mkdir -p "$BUILD_DIR/app/data"
-  cp -r "$ROOT/wordhunt" "$ROOT/static" "$BUILD_DIR/app/"
+  cp -r "$ROOT/wordhunt" "$ROOT/static" "$ROOT/nano" "$BUILD_DIR/app/"
+  [[ -d "$ROOT/integrations" ]] && cp -r "$ROOT/integrations" "$BUILD_DIR/app/"
   find "$BUILD_DIR/app" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
   cp "$ROOT"/data/*.json "$BUILD_DIR/app/data/" 2>/dev/null || true
   # Word lists are not committed (data/README.md).
@@ -80,9 +89,12 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
     curl -sL -o "$BUILD_DIR/app/data/enable1.txt" https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt; fi
   if [[ -f "$ROOT/data/common-30k.txt" ]]; then cp "$ROOT/data/common-30k.txt" "$BUILD_DIR/app/data/"; else
     curl -sL https://raw.githubusercontent.com/arstgit/high-frequency-vocabulary/master/30k.txt | tr -d '\r\t' | awk 'NF' > "$BUILD_DIR/app/data/common-30k.txt"; fi
-  # Deps as manylinux wheels for the base image's interpreter (no compilation here).
-  python3 -m pip install -q --target "$BUILD_DIR/app/site" --platform manylinux2014_x86_64 --python-version 3.12 \
-    --only-binary=:all: --implementation cp -r "$ROOT/requirements.txt"
+  # Deps as manylinux wheels for the base image's interpreter (no compilation here). Torch CPU wheels
+  # are tagged manylinux_2_28; python:3.12-slim (Debian bookworm, glibc 2.36) runs them.
+  python3 -m pip install -q --target "$BUILD_DIR/app/site" --python-version 3.12 --implementation cp \
+    --platform manylinux2014_x86_64 --platform manylinux_2_17_x86_64 --platform manylinux_2_28_x86_64 \
+    --only-binary=:all: -r "$ROOT/requirements.txt"
+  find "$BUILD_DIR/app/site" -type d -name tests -prune -exec rm -rf {} + 2>/dev/null || true
   tar -C "$BUILD_DIR" -cf "$BUILD_DIR/layer.tar" app
   echo "pushing $IMAGE"
   gcloud auth print-access-token | "$CRANE" auth login "$AR_HOST" -u oauth2accesstoken --password-stdin >/dev/null
@@ -96,7 +108,7 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
 fi
 
 TRAFFIC_FLAG=(--no-traffic)
-if ! gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)' >/dev/null 2>&1; then
+if [[ -z "$EXISTING_URL" ]]; then
   echo "first deploy of $SERVICE: this revision takes traffic"
   TRAFFIC_FLAG=()
 fi
@@ -106,11 +118,11 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated --no-invoker-iam-check \
   --tag "$TAG" "${TRAFFIC_FLAG[@]}" \
-  --set-env-vars "^|^$ENV_VARS" \
+  --set-env-vars "^|^$ENV_VARS" "${SECRET_FLAGS[@]}" \
   --min-instances 1 --max-instances 1 \
   --session-affinity \
   --timeout 3600 \
-  --cpu 1 --memory 512Mi \
+  --cpu 1 --memory 1Gi \
   --quiet
 
 SERVICE_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
