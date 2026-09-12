@@ -119,6 +119,9 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .fingers{position:absolute;inset:0;pointer-events:none;z-index:3}
 .finger{--fs:34px;position:absolute;top:0;left:0;width:var(--fs);height:var(--fs);margin:calc(var(--fs) / -2) 0 0 calc(var(--fs) / -2);border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);pointer-events:none;transition:transform .09s linear,opacity .2s;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;opacity:0;z-index:3}
 .finger.on{opacity:.95}
+/* Main-board finger avatars are off by default (busy with many bots); trails + a small tip dot stay.
+   Enable with WH_BOARD_AVATARS=1 on the server or ?avatars=1 in the URL. */
+body:not(.board-avatars) .fingers .finger{display:none}
 .finger.idle{opacity:.4;transform-origin:center}
 .actions{display:flex;gap:10px;margin:12px 0 6px}
 .actions button{flex:1;padding:14px;min-height:54px;border-radius:999px}
@@ -580,7 +583,7 @@ function leave(){CODE=null;if(ws){ws.onclose=null;ws.close();ws=null}S=null;hist
 function onMsg(m){
   if(m.type==='error'){if(m.fatal){CODE=null;if(ws){ws.onclose=null}history.pushState({},'','/');const b=$('homeBanner');b.classList.remove('hidden');b.textContent=m.reason==='full'?`Room ${m.code||''} is full (${S&&S.max_humans||24} players). Create a new room?`:`Room ${m.code||''} not found — it may have expired, the server restarted (a deploy resets rooms), or this link points at a different build. Create a new room?`;S=null;show('home')}else{$('homeErr').textContent=m.error}return}
   if(m.type==='welcome'){return}
-  if(m.type==='state'){const prev=S;S=m;offset=m.now-Date.now()/1000;render(prev);return}
+  if(m.type==='state'){const prev=S;S=m;offset=m.now-Date.now()/1000;document.body.classList.toggle('board-avatars',!!(m.board_avatars||new URLSearchParams(location.search).get('avatars')==='1'));render(prev);return}
   if(m.type==='cursors'){for(const k in m.cursors){cursors[k]=m.cursors[k];noteThinking(k,m.cursors[k])}drawOthers();return}
   if(m.type==='tick'){if(!SPECT&&m.entry.seat_id===ME)return;addTick(m.entry,true);const s=S&&S.seats.find(x=>x.seat_id===m.entry.seat_id);if(s&&m.entry.ok){s.score+=m.entry.delta;s.n_words=(s.n_words||0)+1}if(SPECT)renderSpSeats();else renderScores();return}
   if(m.type==='mine'){onMine(m);return}
@@ -696,7 +699,7 @@ function renderBig(){for(const id of ['bigFinds','spBigFinds']){const el=$(id);i
 function noteThinking(sid,c){if(!S||S.state!=='playing')return;const s=S.seats.find(x=>x.seat_id===sid);if(!s||s.kind!=='ai')return;const p=(c&&c.path)||[];const st=THINK[sid]||(THINK[sid]={said:false});
   if(p.length<=1){st.said=false;return}
   if(p.length>=3&&!st.said){st.said=true;const w=p.map(i=>S.board[i]).join('').toUpperCase();const t=S.race_s-(S.phase_ends_at-now());addTick({seat_id:sid,name:s.name,color:s.color,word:w.slice(0,2)+'_'.repeat(w.length-2),masked:true,think:true,t},true)}}
-function drawPaths(){const svg=$('paths');if(!S||!$('board').children.length)return;let h='';for(const s of S.seats){const p=s.seat_id===ME?myPath:(cursors[s.seat_id]||{}).path;if(!p||p.length<2)continue;const pts=p.map(i=>tileCenter(i).join(',')).join(' ');h+=`<polyline points="${pts}" fill="none" stroke="${s.seat_id===ME?'#fff':s.color}" stroke-width="${s.seat_id===ME?5:6}" stroke-opacity="${s.seat_id===ME?.9:.55}" stroke-linecap="round" stroke-linejoin="round"/>`}svg.innerHTML=h}
+function drawPaths(){const svg=$('paths');if(!S||!$('board').children.length)return;let h='';for(const s of S.seats){const p=s.seat_id===ME?myPath:(cursors[s.seat_id]||{}).path;if(s.seat_id!==ME&&p&&p.length>=1&&!document.body.classList.contains('board-avatars')){const [tx,ty]=tileCenter(p[p.length-1]);h+=`<circle cx="${tx}" cy="${ty}" r="7" fill="${s.color}" fill-opacity=".85" stroke="#fff" stroke-width="2"/>`}if(!p||p.length<2)continue;const pts=p.map(i=>tileCenter(i).join(',')).join(' ');h+=`<polyline points="${pts}" fill="none" stroke="${s.seat_id===ME?'#fff':s.color}" stroke-width="${s.seat_id===ME?5:6}" stroke-opacity="${s.seat_id===ME?.9:.55}" stroke-linecap="round" stroke-linejoin="round"/>`}svg.innerHTML=h}
 window.addEventListener('resize',()=>requestAnimationFrame(drawOthers));
 
 // ---------- game feed ----------

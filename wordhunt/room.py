@@ -23,6 +23,7 @@ RACE_S = float(os.environ.get("WH_RACE_S", 75.0))
 HOTJOIN_S = float(os.environ.get("WH_HOTJOIN_S", 15.0))   # joiners inside this window play the current race
 INTEGRATIONS = os.environ.get("WH_INTEGRATIONS") == "1"
 TICKER_MAX = 60
+BOARD_AVATARS = os.environ.get("WH_BOARD_AVATARS", "0") == "1"   # show the round finger avatars on the main board
 MAX_HUMANS = int(os.environ.get("WH_MAX_HUMANS", 40))
 MAX_AI = int(os.environ.get("WH_MAX_AI", 6))                 # catalog seats (nano, reflex, gemma)
 MAX_AI_CROWD = int(os.environ.get("WH_MAX_AI_CROWD", 12))    # total AI seats once the host adds a crowd
@@ -286,6 +287,7 @@ class Room:
             "spectators": len(self.spectators),
             "recreated": self.recreated,
             "restored": self.restored,
+            "board_avatars": BOARD_AVATARS,
             "quiet": self.quiet,
         }
 
