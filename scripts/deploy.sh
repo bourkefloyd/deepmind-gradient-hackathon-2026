@@ -56,9 +56,14 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudb
 #   WH_SEATS (default lineup, e.g. "nano,reflex-a"), WH_NANO_TEMPERATURE, WH_NANO_THINK
 #   Discord via Nango: on by default when Secret Manager `nango-secret-key` exists (mounted as NANGO_SECRET_KEY,
 #   WH_INTEGRATIONS=1, WH_PUBLIC_URL=<service url>); WH_INTEGRATIONS=0 disables. NANGO_CONNECTION_ID etc. pass through.
-ENV_VARS="WH_BUILD=$BUILD_LABEL|WH_ROOM_STORE=${WH_ROOM_STORE:-gs://$PROJECT-wordhunt-rooms}"
-gcloud storage buckets describe "gs://${WH_ROOM_STORE#gs://}" >/dev/null 2>&1 || gcloud storage buckets describe "gs://$PROJECT-wordhunt-rooms" >/dev/null 2>&1 || \
-  gcloud storage buckets create "gs://$PROJECT-wordhunt-rooms" --location="$REGION" --uniform-bucket-level-access --quiet || echo "warn: could not create room bucket"
+# Room persistence bucket (rooms survive deploys); WH_ROOM_STORE overrides, e.g. gs://bucket/prefix or file:/dir.
+ROOM_STORE="${WH_ROOM_STORE:-gs://$PROJECT-wordhunt-rooms}"
+ENV_VARS="WH_BUILD=$BUILD_LABEL|WH_ROOM_STORE=$ROOM_STORE"
+if [[ "$ROOM_STORE" == gs://* ]]; then
+  BUCKET="${ROOM_STORE#gs://}"; BUCKET="${BUCKET%%/*}"
+  gcloud storage buckets describe "gs://$BUCKET" >/dev/null 2>&1 || \
+    gcloud storage buckets create "gs://$BUCKET" --location="$REGION" --uniform-bucket-level-access --quiet || echo "warn: could not create room bucket gs://$BUCKET"
+fi
 for v in GEMMA_BASE_URL GEMMA_API_KEY GEMMA_MODELS GEMMA_SEATS NANO_CKPT WH_NANO_TEMPERATURE WH_NANO_THINK WH_SEATS WH_MAX_HUMANS WH_INTEGRATIONS \
          NANGO_CONNECTION_ID NANGO_DISCORD_INTEGRATION_ID NANGO_PROVIDER_CONFIG_KEY NANGO_DISCORD_RECAP_ACTION NANGO_BASE_URL DISCORD_CHANNEL_ID WH_INTEGRATIONS_TIMEOUT_S; do
   if [[ -n "${!v:-}" ]]; then ENV_VARS="$ENV_VARS|$v=${!v}"; fi
