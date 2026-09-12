@@ -1,12 +1,25 @@
-# Word Hunt arena - nano training + local Gemma understudy. Targets check-mps and mlxvlm-* are ported from
-# actionfleet's Makefile (same model tag and flags).
+# Word Hunt arena - game server, nano training, local Gemma understudy. Targets check-mps and mlxvlm-* are
+# ported from actionfleet's Makefile (same model tag and flags).
 
-.PHONY: help setup words check-mps data-smoke train-smoke rollout-smoke data train mlxvlm-up mlxvlm-down mlxvlm-stop mlxvlm-status gemma-seat
+.PHONY: help setup setup-server words serve dev smoke docker-build docker-run \
+	check-mps data-smoke train-smoke rollout-smoke data train mlxvlm-up mlxvlm-down mlxvlm-stop mlxvlm-status gemma-seat
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 PYTHON ?= .venv/bin/python
+
+# Game server (wordhunt/server.py). Default port 8000 so it does not collide with mlx-vlm on 8080.
+# HOST=0.0.0.0 so a phone on the same Wi-Fi can join via the LAN URL printed at startup.
+HOST ?= 0.0.0.0
+PORT ?= 8000
+# Round knobs read by wordhunt/room.py; shorten for fast local rounds: make serve WH_COUNTDOWN_S=3 WH_RACE_S=20
+WH_COUNTDOWN_S ?= 20
+WH_RACE_S      ?= 75
+export WH_COUNTDOWN_S WH_RACE_S
+UVICORN_FLAGS := --ws-ping-interval 20 --ws-ping-timeout 20
+WORDS := data/enable1.txt data/common-30k.txt
+IMAGE ?= wordhunt:local
 
 # Local vision Gemma 4 12B served by mlx-vlm (Apple Silicon). Point MLXVLM_MODEL at a HF repo or local path.
 MLXVLM_MODEL ?= mlx-community/gemma-4-12B-it-4bit
@@ -30,15 +43,69 @@ RESET  := \033[0m
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-16s$(RESET) %s\n", $$1, $$2}'
 
-setup: ## Create .venv with torch + numpy (uv if present)
-	@if command -v uv >/dev/null 2>&1; then uv venv .venv -q && uv pip install -q --python .venv/bin/python torch numpy; \
-	else python3 -m venv .venv && .venv/bin/pip install -q torch numpy; fi
-	@echo -e "$(GREEN).venv ready.$(RESET)"
+setup: setup-server ## Create .venv with server deps + torch + numpy (uv if present)
+	@if command -v uv >/dev/null 2>&1; then uv pip install -q --python .venv/bin/python torch numpy; \
+	else .venv/bin/pip install -q torch numpy; fi
+	@echo -e "$(GREEN).venv ready (server + training).$(RESET)"
+
+setup-server: ## Create .venv with just the game server deps (fastapi, uvicorn) - fast, no torch
+	@if command -v uv >/dev/null 2>&1; then \
+		[ -d .venv ] || uv venv .venv -q; \
+		uv pip install -q --python .venv/bin/python -r requirements.txt; \
+	else \
+		[ -d .venv ] || python3 -m venv .venv; \
+		.venv/bin/pip install -q -r requirements.txt; \
+	fi
+	@echo -e "$(GREEN).venv ready (server).$(RESET)"
 
 words: ## Download enable1 + common-30k into data/ (not committed; see data/README.md)
 	@curl -sL -o data/enable1.txt https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt
 	@curl -sL https://raw.githubusercontent.com/arstgit/high-frequency-vocabulary/master/30k.txt | tr -d '\r\t' | awk 'NF' > data/common-30k.txt
 	@wc -l data/enable1.txt data/common-30k.txt
+
+# Word lists are gitignored; fetch them on first run so serve/dev/smoke work from a fresh clone.
+$(WORDS):
+	@$(MAKE) --no-print-directory words
+
+# ---------------------------------------------------------------------------
+# Game server (same uvicorn flags as the Dockerfile / Cloud Run)
+# ---------------------------------------------------------------------------
+serve: $(WORDS) ## Run the game server on HOST:PORT (default 0.0.0.0:8000); phones join via the LAN URL
+	@if [ ! -x .venv/bin/uvicorn ]; then echo -e "$(RED)No server deps in .venv - run 'make setup-server' first.$(RESET)"; exit 1; fi
+	@echo -e "$(CYAN)Word Hunt arena$(RESET)  local: $(GREEN)http://localhost:$(PORT)$(RESET)  LAN: $(GREEN)http://$$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $$1}' || echo '<lan-ip>'):$(PORT)$(RESET)"
+	@echo -e "  round: countdown $(WH_COUNTDOWN_S)s, race $(WH_RACE_S)s   (override: make serve WH_COUNTDOWN_S=3 WH_RACE_S=20)"
+	@.venv/bin/uvicorn wordhunt.server:app --host $(HOST) --port $(PORT) $(UVICORN_FLAGS)
+
+dev: $(WORDS) ## Like serve, but auto-reloads on changes to wordhunt/ (rooms are in-memory and reset on reload)
+	@if [ ! -x .venv/bin/uvicorn ]; then echo -e "$(RED)No server deps in .venv - run 'make setup-server' first.$(RESET)"; exit 1; fi
+	@echo -e "$(CYAN)Word Hunt arena (reload)$(RESET)  $(GREEN)http://localhost:$(PORT)$(RESET)  round: $(WH_COUNTDOWN_S)s + $(WH_RACE_S)s"
+	@.venv/bin/uvicorn wordhunt.server:app --host $(HOST) --port $(PORT) $(UVICORN_FLAGS) --reload --reload-dir wordhunt
+
+smoke: $(WORDS) ## Boot the server on a scratch port, hit /api/health + /api/rooms, shut it down
+	@if [ ! -x .venv/bin/uvicorn ]; then echo -e "$(RED)No server deps in .venv - run 'make setup-server' first.$(RESET)"; exit 1; fi
+	@port=$$(.venv/bin/python -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])'); \
+	log=$$(mktemp -t wordhunt-smoke); \
+	.venv/bin/uvicorn wordhunt.server:app --host 127.0.0.1 --port $$port $(UVICORN_FLAGS) >"$$log" 2>&1 & pid=$$!; \
+	trap 'kill $$pid 2>/dev/null; wait $$pid 2>/dev/null' EXIT; \
+	for i in $$(seq 1 50); do curl -fsS "http://127.0.0.1:$$port/api/health" >/dev/null 2>&1 && break; sleep 0.2; done; \
+	if ! health=$$(curl -fsS "http://127.0.0.1:$$port/api/health"); then \
+		echo -e "$(RED)server did not come up; log:$(RESET)"; cat "$$log"; exit 1; fi; \
+	echo "health:    $$health"; \
+	code=$$(curl -fsS -X POST "http://127.0.0.1:$$port/api/rooms" | .venv/bin/python -c 'import json,sys;print(json.load(sys.stdin)["code"])'); \
+	echo "room:      $$code"; \
+	info=$$(curl -fsS "http://127.0.0.1:$$port/api/rooms/$$code"); \
+	echo "snapshot:  $$info"; \
+	curl -fsS -o /dev/null "http://127.0.0.1:$$port/" && curl -fsS -o /dev/null "http://127.0.0.1:$$port/r/$$code" && curl -fsS -o /dev/null "http://127.0.0.1:$$port/s/$$code"; \
+	echo "index:     ok (/, /r/$$code, /s/$$code)"; \
+	curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$$port/api/rooms/NOPE" | grep -q '^404$$' && echo "404:       ok (unknown room)"; \
+	echo -e "$(GREEN)smoke passed.$(RESET)"
+
+docker-build: ## Build the Cloud Run image locally (fetches word lists at build time)
+	@docker build -t $(IMAGE) .
+
+docker-run: ## Run the built image on PORT (default 8000), same entrypoint as Cloud Run
+	@echo -e "$(CYAN)$(IMAGE)$(RESET) -> $(GREEN)http://localhost:$(PORT)$(RESET)"
+	@docker run --rm -it -p $(PORT):8080 -e WH_COUNTDOWN_S=$(WH_COUNTDOWN_S) -e WH_RACE_S=$(WH_RACE_S) $(IMAGE)
 
 check-mps: ## Preflight: fail unless PyTorch gets a real GPU (MPS) in THIS shell - run before any long training
 	@$(PYTHON) nano/device.py
