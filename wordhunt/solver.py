@@ -110,6 +110,54 @@ class Solver:
         return w if w in self.wordset else None
 
 
+def path_for_word(board: str, word: str, rng=None) -> list[int] | None:
+    """A legal tile path spelling `word` on `board`, or None if it cannot be traced."""
+    board = board.lower()
+    word = word.lower()
+    if not word:
+        return None
+    starts = [i for i in range(16) if board[i] == word[0]]
+    if rng is not None:
+        rng.shuffle(starts)
+
+    def dfs(i: int, k: int, path: list[int]) -> list[int] | None:
+        path.append(i)
+        if k == len(word) - 1:
+            return list(path)
+        for j in NEIGHBORS[i]:
+            if j not in path and board[j] == word[k + 1]:
+                r = dfs(j, k + 1, path)
+                if r:
+                    return r
+        path.pop()
+        return None
+
+    for s in starts:
+        r = dfs(s, 0, [])
+        if r:
+            return r
+    return None
+
+
+def best_effort_path(board: str, word: str, rng) -> list[int]:
+    """Trace as much of `word` as the board allows, then wander to reach 3 tiles.
+    Used so an AI's hallucinated word still produces a visible (and judged-as-miss) attempt."""
+    board = board.lower()
+    word = word.lower()
+    for n in range(len(word), 0, -1):
+        p = path_for_word(board, word[:n], rng)
+        if p:
+            break
+    else:
+        p = [rng.randrange(16)]
+    while len(p) < 3:
+        opts = [j for j in NEIGHBORS[p[-1]] if j not in p]
+        if not opts:
+            break
+        p.append(rng.choice(opts))
+    return p
+
+
 @lru_cache(maxsize=1)
 def get_solver() -> Solver:
     return Solver()

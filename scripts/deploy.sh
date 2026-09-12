@@ -22,8 +22,19 @@ echo "project=$PROJECT region=$REGION service=$SERVICE"
 
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com --quiet
 
+# AI seat config is passed through as env vars when set locally:
+#   GEMMA_BASE_URL (OpenAI-compatible, e.g. http://LAMBDA_IP:8000/v1), GEMMA_API_KEY, GEMMA_MODELS (comma list)
+#   or GEMMA_SEATS (JSON list of {id,name,model,base_url,api_key,label}); NANO_CKPT for the nano seat.
+ENV_VARS=""
+for v in GEMMA_BASE_URL GEMMA_API_KEY GEMMA_MODELS GEMMA_SEATS NANO_CKPT NANO_TEMPERATURE; do
+  if [[ -n "${!v:-}" ]]; then ENV_VARS="${ENV_VARS:+$ENV_VARS,}$v=${!v}"; fi
+done
+ENV_FLAG=()
+if [[ -n "$ENV_VARS" ]]; then ENV_FLAG=(--set-env-vars "^,^$ENV_VARS"); fi
+
 gcloud run deploy "$SERVICE" \
   --source . \
+  "${ENV_FLAG[@]}" \
   --region "$REGION" \
   --allow-unauthenticated \
   --min-instances 1 --max-instances 1 \

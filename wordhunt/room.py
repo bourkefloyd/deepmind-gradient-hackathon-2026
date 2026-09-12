@@ -9,11 +9,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Awaitable
 
-from .board import generate_board
+from .board import generate_board, load_packed_boards
 from .hand import Hand, HandProfile
 from .scoring import score_word
+from .seats import registry
 from .seats.base import Policy
-from .seats.fake import FAKE_SEATS
 from .solver import Solver
 
 COUNTDOWN_S = float(os.environ.get("WH_COUNTDOWN_S", 20.0))
@@ -36,6 +36,7 @@ class Seat:
     queued: bool = False            # joined mid-round; plays from the next round
     cursor_path: list[int] = field(default_factory=list)
     label: str = ""                 # e.g. "heuristic", "nano 10M", "gemma-4-31b"
+    spec_id: str = ""
 
     @property
     def score(self) -> int:
@@ -51,6 +52,11 @@ class Seat:
             "score": self.score, "n_words": len(self.found), "connected": self.connected,
             "queued": self.queued, "label": self.label,
         }
+        if self.hand and hasattr(self.hand.policy, "public_stats"):
+            try:
+                d["stats"] = self.hand.policy.public_stats()
+            except Exception:
+                pass
         if reveal_words:
             d["words"] = sorted(self.found.items(), key=lambda kv: (-kv[1], kv[0]))
         return d
@@ -78,8 +84,12 @@ class Room:
         self._task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self.results: list[dict] = []
-        for spec in FAKE_SEATS:
-            self.add_ai(spec["seat_id"], spec["name"], spec["policy"](solver.rank, random.Random(self.rng.random())), spec["profile"], label="heuristic")
+        self.spectators: set[Any] = set()
+        self._boards = load_packed_boards()
+        self.rng.shuffle(self._boards)
+        for spec in registry.catalog():
+            if spec.default and spec.available:
+                self.add_from_catalog(spec.id)
 
     # ---- seats -------------------------------------------------------------------------------
     def _color(self) -> str:
@@ -89,11 +99,24 @@ class Room:
                 return c
         return self.rng.choice(COLORS)
 
-    def add_ai(self, seat_id: str, name: str, policy: Policy, profile: HandProfile, label: str = "") -> Seat:
-        seat = Seat(seat_id, name, "ai", self._color(), hand=Hand(policy, profile, random.Random(self.rng.random())), label=label)
+    def add_ai(self, seat_id: str, name: str, policy: Policy, profile: HandProfile, label: str = "", spec_id: str = "") -> Seat:
+        seat = Seat(seat_id, name, "ai", self._color(), hand=Hand(policy, profile, random.Random(self.rng.random())), label=label, spec_id=spec_id)
         seat.queued = self.state in ("countdown", "playing")
         self.seats[seat_id] = seat
         return seat
+
+    def add_from_catalog(self, spec_id: str) -> Seat | None:
+        spec = registry.find(spec_id)
+        if spec is None or not spec.available or len(self.seats) >= 8:
+            return None
+        n = sum(1 for s in self.seats.values() if s.spec_id == spec_id)
+        seat_id = f"ai:{spec_id}" + (f"-{n + 1}" if n else "")
+        name = spec.name + (f" {n + 1}" if n else "")
+        try:
+            policy, profile = spec.make(self.solver, random.Random(self.rng.random()))
+        except Exception:
+            return None
+        return self.add_ai(seat_id, name, policy, profile, label=spec.label, spec_id=spec_id)
 
     def add_human(self, player_id: str, name: str, ws: Any) -> Seat:
         seat = self.seats.get(player_id)
@@ -113,6 +136,7 @@ class Room:
         return bool(h and h.sockets)
 
     def drop_socket(self, ws: Any) -> None:
+        self.spectators.discard(ws)
         for s in self.seats.values():
             s.sockets.discard(ws)
 
@@ -143,10 +167,17 @@ class Room:
             "countdown_s": COUNTDOWN_S,
             "race_s": RACE_S,
             "results": self.results if reveal else [],
+            "catalog": [c.public() for c in registry.catalog()],
+            "spectators": len(self.spectators),
         }
 
     async def broadcast(self, msg: dict) -> None:
         dead = []
+        for ws in list(self.spectators):
+            try:
+                await ws.send_json(msg)
+            except Exception:
+                dead.append(ws)
         for s in self.seats.values():
             for ws in list(s.sockets):
                 try:
@@ -176,7 +207,7 @@ class Room:
     async def _run_round(self) -> None:
         self.round_no += 1
         self.state = "countdown"
-        self.board, self.words = generate_board(self.solver, self.rng)
+        self.board, self.words = self._next_board()
         self.ticker = []
         self.results = []
         for s in self.seats.values():
@@ -207,6 +238,15 @@ class Room:
             s.cursor_path = []
         self.results = self._compute_results()
         await self.send_state()
+
+    def _next_board(self) -> tuple[str, dict[str, list[int]]]:
+        """Packed boards first (stage-safe, known long words), random live boards after."""
+        while self._boards:
+            b = self._boards.pop()
+            words = self.solver.solve(b)
+            if words:
+                return b, words
+        return generate_board(self.solver, self.rng)
 
     def _compute_results(self) -> list[dict]:
         board_words = sorted(self.words, key=lambda w: (-len(w), w))

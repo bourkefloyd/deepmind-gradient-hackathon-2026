@@ -61,6 +61,12 @@ async def room_page(code: str):
     return FileResponse(INDEX)
 
 
+@app.get("/s/{code}")
+async def spectator_page(code: str):
+    """Projector / spectator view: same page, no seat."""
+    return FileResponse(INDEX)
+
+
 @app.post("/api/rooms")
 async def create_room():
     gc_rooms()
@@ -91,17 +97,26 @@ async def ws_room(ws: WebSocket, code: str):
         await ws.close()
         return
     seat = None
+    spectator = False
     try:
         while True:
             msg = await ws.receive_json()
             t = msg.get("type")
-            if t == "hello":
+            if t == "hello" and msg.get("role") == "spectator":
+                spectator = True
+                room.spectators.add(ws)
+                await ws.send_json({"type": "welcome", "role": "spectator"})
+                await ws.send_json(room.snapshot())
+            elif t == "hello":
                 pid = clean_id(msg.get("player_id", ""))
                 name = clean_name(msg.get("name", ""), pid)
                 players[pid] = name
                 seat = room.add_human(pid, name, ws)
                 await ws.send_json({"type": "welcome", "player_id": pid, "seat_id": seat.seat_id, "name": seat.name})
                 await room.send_state()
+            elif spectator:
+                if t == "ping":
+                    await ws.send_json({"type": "pong", "now": time.time()})
             elif seat is None:
                 await ws.send_json({"type": "error", "error": "say hello first"})
             elif t == "name":
@@ -114,6 +129,16 @@ async def ws_room(ws: WebSocket, code: str):
             elif t == "rematch":
                 if room.can_control(seat.seat_id) and room.state == "results":
                     await room.start()
+            elif t == "add_seat":
+                if room.can_control(seat.seat_id) and room.state in ("lobby", "results"):
+                    room.add_from_catalog(str(msg.get("spec_id", ""))[:40])
+                    await room.send_state()
+            elif t == "remove_seat":
+                sid = str(msg.get("seat_id", ""))
+                target = room.seats.get(sid)
+                if target and target.kind == "ai" and room.can_control(seat.seat_id) and room.state in ("lobby", "results"):
+                    room.remove_seat(sid)
+                    await room.send_state()
             elif t == "submit":
                 path = [int(x) for x in msg.get("path", [])][:8]
                 res = await room.human_submit(seat, path)

@@ -65,6 +65,29 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .rank{font-size:20px;width:26px;text-align:center}
 .small{color:var(--muted);font-size:13px;text-align:center;margin:8px 0}
 .hidden{display:none!important}
+.seat .x{margin-left:8px;background:#3a2a2a;color:#ffb3b3;border-radius:8px;padding:4px 10px;font-size:13px;font-weight:700}
+.addseat{display:flex;gap:8px;margin-top:10px}
+.addseat select{flex:1;font:inherit;font-size:15px;padding:10px;border-radius:10px;background:#1f2333;color:var(--ink);border:1px solid #2e3346}
+.addseat button{padding:10px 14px;font-size:15px}
+.stats{font-size:11px;color:var(--muted);margin-left:6px}
+/* spectator / projector */
+.screen.spect{max-width:none;padding:18px 24px}
+.sp-top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}
+.sp-top h1{margin:0;font-size:32px}
+.sp-top .join{font-size:18px;color:var(--muted)}
+.sp-top .join b{color:var(--ink);letter-spacing:4px;font-size:26px}
+.sp-top img{width:96px;height:96px;border-radius:10px;background:#fff;padding:4px}
+.sp-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,38%);gap:24px;flex:1;min-height:0}
+.sp-left{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:0}
+.sp-left .boardwrap{max-width:min(70vh,100%);width:100%}
+.sp-big{font-size:64px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;text-align:center;min-height:70px}
+.sp-big.low{color:var(--bad)}
+.sp-right{display:flex;flex-direction:column;gap:12px;min-height:0}
+.sp-right .seats .seat{font-size:20px;padding:12px 14px}
+.sp-right .ticker{flex:1;max-height:none;font-size:18px;min-height:120px}
+.sp-right .words{width:100%;font-size:14px;color:var(--muted);text-transform:uppercase;line-height:1.6}
+.sp-right .words b{color:var(--ink)}
+@media (max-width:820px){.sp-main{grid-template-columns:1fr}.sp-right .ticker{max-height:200px}}
 .err{color:var(--bad);text-align:center;min-height:20px}
 </style>
 </head>
@@ -91,7 +114,10 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   <div class="codebig" id="lobbyCode"></div>
   <div class="link" id="lobbyLink"></div>
   <div class="name-edit" style="margin-top:14px">You are <b id="nameEdit2" contenteditable="true" spellcheck="false"></b></div>
-  <div class="card"><div class="seats" id="lobbySeats"></div></div>
+  <div class="card"><div class="seats" id="lobbySeats"></div>
+    <div class="addseat" id="addSeat"><select id="seatSel"></select><button id="btnAddSeat">Add seat</button></div>
+    <div class="small" style="margin:8px 0 0">Projector view: <span id="lobbySpect" style="color:var(--ink)"></span></div>
+  </div>
   <button id="btnStart" class="primary big">Start</button>
   <div id="lobbyWait" class="small">Waiting for the host to start</div>
 </section>
@@ -134,6 +160,17 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   <div class="small"><a href="/" style="color:var(--muted)">Leave room</a></div>
 </section>
 
+<section id="spect" class="screen spect">
+  <div class="sp-top">
+    <div><h1>Word Hunt arena</h1><div class="join">Join at <span id="spJoin"></span> · code <b id="spCode"></b></div></div>
+    <img id="spQr" alt="QR to join">
+  </div>
+  <div class="sp-main">
+    <div class="sp-left"><div class="sp-big" id="spBig"></div><div id="spBoardSlot" style="width:100%;display:flex;justify-content:center"></div><div class="small" id="spNote"></div></div>
+    <div class="sp-right"><div class="seats" id="spSeats"></div><div id="spTickerSlot" style="flex:1;min-height:0;display:flex"></div></div>
+  </div>
+</section>
+
 <script>
 // ---------- identity: anonymous id in localStorage; a passkey can be attached to it later ----------
 function rndHex(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return [...a].map(b=>b.toString(16).padStart(2,'0')).join('')}
@@ -145,19 +182,20 @@ for(const el of document.querySelectorAll('#nameEdit,#nameEdit2')){el.textConten
 // ---------- state ----------
 const $=id=>document.getElementById(id);
 let ws=null,CODE=null,S=null,offset=0,myPath=[],myWords=[],cursors={},reconnectT=null,lastTickerLen=0;
+const SPECT=/^\/s\//.test(location.pathname);const ME=SPECT?'__spectator__':PID;
 const NEIGH=[];for(let i=0;i<16;i++){const r=i>>2,c=i&3,n=[];for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const rr=r+dr,cc=c+dc;if(rr>=0&&rr<4&&cc>=0&&cc<4)n.push(rr*4+cc)}NEIGH.push(n)}
 
 function show(id){for(const s of document.querySelectorAll('.screen'))s.classList.toggle('on',s.id===id)}
 function send(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 function now(){return Date.now()/1000+offset}
 function isHost(){return S&&S.host_id===PID}
-function mySeat(){return S&&S.seats.find(s=>s.seat_id===PID)}
+function mySeat(){return S&&S.seats.find(s=>s.seat_id===ME)}
 
 // ---------- rooms ----------
 async function createRoom(){$('homeErr').textContent='';try{const r=await fetch('/api/rooms',{method:'POST'});const j=await r.json();history.pushState({},'','/r/'+j.code);connect(j.code)}catch(e){$('homeErr').textContent='Could not create room'}}
 function joinRoom(code){code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(code.length!==4){$('homeErr').textContent='Code is 4 characters';return}history.pushState({},'','/r/'+code);connect(code)}
 function connect(code){CODE=code;if(ws){ws.onclose=null;ws.close()}const proto=location.protocol==='https:'?'wss':'ws';ws=new WebSocket(`${proto}://${location.host}/ws/${code}`);
-  ws.onopen=()=>{send({type:'hello',player_id:PID,name:NAME})};
+  ws.onopen=()=>{send(SPECT?{type:'hello',role:'spectator'}:{type:'hello',player_id:PID,name:NAME})};
   ws.onmessage=e=>onMsg(JSON.parse(e.data));
   ws.onclose=()=>{if(CODE){reconnectT=setTimeout(()=>connect(CODE),1200)}}}
 function leave(){CODE=null;if(ws){ws.onclose=null;ws.close();ws=null}S=null;history.pushState({},'','/');show('home')}
@@ -167,21 +205,34 @@ function onMsg(m){
   if(m.type==='welcome'){return}
   if(m.type==='state'){const prev=S;S=m;offset=m.now-Date.now()/1000;render(prev);return}
   if(m.type==='cursors'){for(const k in m.cursors){cursors[k]=m.cursors[k]}drawOthers();return}
-  if(m.type==='tick'){addTick(m.entry,true);const s=S&&S.seats.find(x=>x.seat_id===m.entry.seat_id);if(s&&m.entry.ok){s.score+=m.entry.delta}return}
+  if(m.type==='tick'){addTick(m.entry,true);const s=S&&S.seats.find(x=>x.seat_id===m.entry.seat_id);if(s&&m.entry.ok){s.score+=m.entry.delta;s.n_words=(s.n_words||0)+1}if(SPECT)renderSpSeats();return}
   if(m.type==='mine'){onMine(m);return}
 }
 
 // ---------- render ----------
-function seatRow(s,withScore){const me=s.seat_id===PID;return `<div class="seat"><span class="dot" style="background:${s.color}"></span><span>${esc(s.name)}${me?' (you)':''}${s.kind==='ai'?' <span style="color:var(--muted);font-size:12px">· AI'+(s.label?' · '+esc(s.label):'')+'</span>':''}</span>${withScore?`<span class="score">${s.score}</span>`:`<span class="tag">${s.seat_id===S.host_id?'host':(s.queued?'next round':(s.connected?'':'offline'))}</span>`}</div>`}
+function seatRow(s,withScore,removable){const me=s.seat_id===ME;return `<div class="seat"><span class="dot" style="background:${s.color}"></span><span>${esc(s.name)}${me?' (you)':''}${s.kind==='ai'?' <span style="color:var(--muted);font-size:12px">· AI'+(s.label?' · '+esc(s.label):'')+'</span>':''}</span>${withScore?`<span class="score">${s.score}</span>`:`<span class="tag">${s.seat_id===S.host_id?'host':(s.queued?'next round':(s.connected?'':'offline'))}</span>`}${removable&&s.kind==='ai'?`<button class="x" data-rm="${s.seat_id}">remove</button>`:''}</div>`}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function render(prev){
   const st=S.state;const changed=!prev||prev.state!==st||prev.round!==S.round;
-  if(st==='lobby'){show('lobby');$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=location.origin+'/r/'+S.code;$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('');const h=isHost();$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h)}
+  if(SPECT){renderSpect(prev,changed);return}
+  if(st==='lobby'){show('lobby');$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=location.origin+'/r/'+S.code;$('lobbySpect').textContent=location.origin+'/s/'+S.code;const h=isHost();$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false,h)).join('');for(const b of $('lobbySeats').querySelectorAll('[data-rm]'))b.onclick=()=>send({type:'remove_seat',seat_id:b.dataset.rm});$('addSeat').classList.toggle('hidden',!h);const sel=$('seatSel');const cur=sel.value;sel.innerHTML=(S.catalog||[]).filter(c=>c.available).map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.label)}</option>`).join('');if(cur)sel.value=cur;$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h)}
   else if(st==='countdown'){show('countdown');$('cdRound').textContent=S.round;$('cdSeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('')}
   else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};$('myWords').innerHTML='';$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers()}show('play');const me=mySeat();$('myScore').textContent=me?me.score:0;const my=mySeat();if(my&&my.queued){$('flash').textContent='You joined mid-round: you play the next one';$('flash').className='flash'}for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
-  else if(st==='results'){show('results');$('resRound').textContent=S.round;buildBoard($('resBoard'),S.board,false);const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const medals=['🥇','🥈','🥉'];$('resSeats').innerHTML=seats.map((s,i)=>`<div class="seat"><span class="rank">${medals[i]||(i+1)}</span><span class="dot" style="background:${s.color}"></span><span>${esc(s.name)}${s.seat_id===PID?' (you)':''}</span><span class="score">${s.score}</span><div class="words">${(s.words||[]).map(([w,p])=>`<b>${w}</b> ${p}`).join(' · ')||'<i>no words</i>'}</div></div>`).join('');const r=S.results&&S.results[0];if(r){$('resN').textContent=r.n_board_words;$('resBest').innerHTML=r.best_words.map(w=>`<b style="color:var(--ink)">${w}</b>`).join(' · ')}const h=isHost();$('btnRematch').classList.toggle('hidden',!h);$('resWait').classList.toggle('hidden',h)}
+  else if(st==='results'){show('results');$('resRound').textContent=S.round;buildBoard($('resBoard'),S.board,false);const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const medals=['🥇','🥈','🥉'];$('resSeats').innerHTML=seats.map((s,i)=>`<div class="seat"><span class="rank">${medals[i]||(i+1)}</span><span class="dot" style="background:${s.color}"></span><span>${esc(s.name)}${s.seat_id===ME?' (you)':''}</span><span class="score">${s.score}</span><div class="words">${(s.words||[]).map(([w,p])=>`<b>${w}</b> ${p}`).join(' · ')||'<i>no words</i>'}</div></div>`).join('');const r=S.results&&S.results[0];if(r){$('resN').textContent=r.n_board_words;$('resBest').innerHTML=r.best_words.map(w=>`<b style="color:var(--ink)">${w}</b>`).join(' · ')}const h=isHost();$('btnRematch').classList.toggle('hidden',!h);$('resWait').classList.toggle('hidden',h)}
 }
-setInterval(()=>{if(!S)return;const left=Math.max(0,S.phase_ends_at-now());if(S.state==='countdown'){$('cdNum').textContent=Math.ceil(left)}else if(S.state==='playing'){const t=$('timer');t.textContent=Math.ceil(left);t.classList.toggle('low',left<10)}},100);
+setInterval(()=>{if(!S)return;const left=Math.max(0,S.phase_ends_at-now());if(S.state==='countdown'){$('cdNum').textContent=Math.ceil(left);if(SPECT)$('spBig').textContent=Math.ceil(left)}else if(S.state==='playing'){const t=$('timer');t.textContent=Math.ceil(left);t.classList.toggle('low',left<10);if(SPECT){const b=$('spBig');b.textContent=Math.ceil(left);b.classList.toggle('low',left<10)}}},100);
+
+// ---------- spectator / projector ----------
+function renderSpSeats(){const reveal=S.state==='results';const seats=[...S.seats].filter(s=>!s.queued||S.state==='lobby').sort((a,b)=>b.score-a.score);const medals=['🥇','🥈','🥉'];
+  $('spSeats').innerHTML=seats.map((s,i)=>`<div class="seat" style="flex-wrap:wrap"><span class="rank">${S.state==='lobby'?'':(medals[i]||(i+1))}</span><span class="dot" style="background:${s.color}"></span><span>${esc(s.name)}${s.kind==='ai'?` <span class="stats">${esc(s.label||'AI')}${s.stats&&s.stats.latency_ms!=null?' · '+s.stats.latency_ms+' ms':''}${s.stats&&s.stats.tokens?' · '+s.stats.tokens+' tok':''}</span>`:''}</span><span class="score">${S.state==='lobby'?'':s.score+' · '+(s.n_words||0)+'w'}</span>${reveal?`<div class="words">${(s.words||[]).map(([w,p])=>`<b>${w}</b> ${p}`).join(' · ')||'<i>no words</i>'}</div>`:''}</div>`).join('')}
+function renderSpect(prev,changed){show('spect');const st=S.state;$('spCode').textContent=S.code;const join=location.origin+'/r/'+S.code;$('spJoin').textContent=join.replace(/^https?:\/\//,'');$('spQr').src='https://api.qrserver.com/v1/create-qr-code/?size=192x192&margin=1&data='+encodeURIComponent(join);
+  const slot=$('spBoardSlot');if(!slot.contains($('boardwrap'))){slot.appendChild($('boardwrap'));$('spTickerSlot').appendChild($('ticker'))}
+  const showBoard=st==='playing'||st==='results';$('boardwrap').classList.toggle('hidden',!showBoard);
+  if(st==='lobby'){$('spBig').textContent='Waiting';$('spBig').classList.remove('low');$('spNote').textContent='Scan to join. The host presses Start.'}
+  else if(st==='countdown'){$('spBig').textContent=Math.ceil(Math.max(0,S.phase_ends_at-now()));$('spBig').classList.remove('low');$('spNote').textContent='Round '+S.round+' starts in'}
+  else if(st==='playing'){if(changed){cursors={};$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,false);buildFingers()}$('spNote').textContent='Round '+S.round;for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;drawOthers();requestAnimationFrame(drawOthers)}
+  else if(st==='results'){$('spBig').textContent='Final';$('spBig').classList.remove('low');const r=S.results&&S.results[0];$('spNote').textContent=r?('Board had '+r.n_board_words+' words · longest: '+r.best_words.slice(0,4).join(', ').toUpperCase()):'';for(const f of $('fingers').children)f.classList.remove('on');$('paths').innerHTML=''}
+  renderSpSeats()}
 
 // ---------- board / tap-to-build ----------
 function buildBoard(el,board,interactive){el.innerHTML='';for(let i=0;i<16;i++){const d=document.createElement('div');d.className='tile';d.dataset.i=i;d.textContent=board[i]||'';if(interactive){d.addEventListener('pointerdown',e=>{e.preventDefault();tap(i)})}el.appendChild(d)}}
@@ -201,11 +252,11 @@ $('btnClear').onclick=clearMine;$('btnSubmit').onclick=submitMine;
 
 // ---------- fingers + paths for other seats ----------
 function tileCenter(i){const wrap=$('boardwrap').getBoundingClientRect();const t=$('board').children[i].getBoundingClientRect();return [t.left-wrap.left+t.width/2,t.top-wrap.top+t.height/2]}
-function buildFingers(){const f=$('fingers');f.innerHTML='';for(const s of S.seats){if(s.seat_id===PID)continue;const d=document.createElement('div');d.className='finger';d.id='f_'+cssId(s.seat_id);d.style.background=s.color;d.textContent=s.name[0]||'?';f.appendChild(d)}}
+function buildFingers(){const f=$('fingers');f.innerHTML='';for(const s of S.seats){if(s.seat_id===ME)continue;const d=document.createElement('div');d.className='finger';d.id='f_'+cssId(s.seat_id);d.style.background=s.color;d.textContent=s.name[0]||'?';f.appendChild(d)}}
 function cssId(s){return s.replace(/[^a-zA-Z0-9]/g,'_')}
 function layoutFingers(){drawOthers()}
-function drawOthers(){if(!S||S.state!=='playing')return;for(const s of S.seats){if(s.seat_id===PID)continue;const d=$('f_'+cssId(s.seat_id));if(!d)continue;const c=cursors[s.seat_id];if(c&&c.tile!=null){const [x,y]=tileCenter(c.tile);d.style.transform=`translate(${x}px,${y}px)`;d.classList.add('on')}else{d.classList.remove('on')}}drawPaths()}
-function drawPaths(){const svg=$('paths');if(!S||!$('board').children.length)return;let h='';for(const s of S.seats){const p=s.seat_id===PID?myPath:(cursors[s.seat_id]||{}).path;if(!p||p.length<2)continue;const pts=p.map(i=>tileCenter(i).join(',')).join(' ');h+=`<polyline points="${pts}" fill="none" stroke="${s.seat_id===PID?'#fff':s.color}" stroke-width="${s.seat_id===PID?5:6}" stroke-opacity="${s.seat_id===PID?.9:.55}" stroke-linecap="round" stroke-linejoin="round"/>`}svg.innerHTML=h}
+function drawOthers(){if(!S||S.state!=='playing')return;for(const s of S.seats){if(s.seat_id===ME)continue;const d=$('f_'+cssId(s.seat_id));if(!d)continue;const c=cursors[s.seat_id];if(c&&c.tile!=null){const [x,y]=tileCenter(c.tile);d.style.transform=`translate(${x}px,${y}px)`;d.classList.add('on')}else{d.classList.remove('on')}}drawPaths()}
+function drawPaths(){const svg=$('paths');if(!S||!$('board').children.length)return;let h='';for(const s of S.seats){const p=s.seat_id===ME?myPath:(cursors[s.seat_id]||{}).path;if(!p||p.length<2)continue;const pts=p.map(i=>tileCenter(i).join(',')).join(' ');h+=`<polyline points="${pts}" fill="none" stroke="${s.seat_id===ME?'#fff':s.color}" stroke-width="${s.seat_id===ME?5:6}" stroke-opacity="${s.seat_id===ME?.9:.55}" stroke-linecap="round" stroke-linejoin="round"/>`}svg.innerHTML=h}
 window.addEventListener('resize',()=>requestAnimationFrame(drawOthers));
 
 // ---------- ticker ----------
@@ -213,12 +264,12 @@ function addTick(e,prepend){const t=$('ticker');const d=document.createElement('
 
 // ---------- buttons ----------
 $('btnCreate').onclick=createRoom;$('btnJoin').onclick=()=>joinRoom($('joinCode').value);$('joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')joinRoom($('joinCode').value)});
-$('btnStart').onclick=()=>send({type:'start'});$('btnRematch').onclick=()=>send({type:'rematch'});
+$('btnStart').onclick=()=>send({type:'start'});$('btnAddSeat').onclick=()=>{const v=$('seatSel').value;if(v)send({type:'add_seat',spec_id:v})};$('btnRematch').onclick=()=>send({type:'rematch'});
 $('lobbyLink').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(location.origin+'/r/'+S.code);$('lobbyLink').textContent='copied: '+location.origin+'/r/'+S.code};
 document.querySelector('#results a').onclick=e=>{e.preventDefault();leave()};
 
 // ---------- boot ----------
-const m=location.pathname.match(/^\/r\/([A-Za-z0-9]{4})/);if(m){connect(m[1].toUpperCase())}else{show('home')}
+const m=location.pathname.match(/^\/[rs]\/([A-Za-z0-9]{4})/);if(m){connect(m[1].toUpperCase())}else{show('home')}
 </script>
 </body>
 </html>
