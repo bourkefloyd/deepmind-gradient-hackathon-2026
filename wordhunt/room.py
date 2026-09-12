@@ -203,6 +203,7 @@ class Room:
             "round": self.round_no,
             "host_id": self.host_id,
             "board": self.board if self.state in ("playing", "results") else "",
+            "n_board_words": len(self.words) if self.state in ("playing", "results") else 0,
             "seats": [s.public(reveal) for s in self.seats.values()],
             "ticker": self.ticker_for(None),
             "max_humans": MAX_HUMANS,
