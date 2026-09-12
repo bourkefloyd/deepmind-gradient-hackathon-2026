@@ -205,6 +205,21 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .rcard .others small{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.8px;margin:4px 0}
 .rcard .chips{justify-content:center}
 .rcard .chip{font-size:11px;padding:3px 6px}
+.rtable{display:grid;grid-template-columns:1fr;gap:4px;margin-top:8px}
+.rt{display:grid;grid-template-columns:22px auto minmax(0,1fr) auto auto 64px;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px}
+.rt.me{border-color:rgba(46,232,122,.5)}
+.rt .rk{color:var(--muted);font-weight:700;text-align:center}
+.rt .av{width:24px;height:24px;font-size:12px;border-width:1.5px}
+.rt .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rt .badge{display:none}.rt .badge.you{display:inline-block}
+.rt .bw{color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-size:12px}
+.rt .nw{color:var(--muted);font-size:12px}
+.rt .sc{font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+.lb-gap{text-align:center;color:var(--muted);letter-spacing:4px;line-height:1;font-size:12px}
+.lb-more{width:100%;min-height:36px;padding:8px;font-size:13px;border-radius:10px;color:var(--muted);background:transparent}
+.scores.many .lb{padding:6px 10px}
+.scores.many .lb .nm{font-size:13px}.scores.many .lb .score{font-size:15px}.scores.many .lb .av{width:26px;height:26px;font-size:13px}.scores.many .lb .medal{width:22px;height:22px;font-size:11px}
+.ticker .merged .msg{color:var(--muted)}.ticker .merged .av{border:0;background:transparent}
 .hl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .hl .box{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px}
 .hl .box h4{margin:0 0 8px;font-size:12.5px;color:var(--muted);font-weight:700}
@@ -228,6 +243,9 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .seats.many .seat .tag,.seats.many .seat .x{font-size:11px;padding:2px 6px}
 .seats.many .seat .words{font-size:11px}
 .seats.many .rank{font-size:14px;width:18px}
+.seats.many .kind,.seats.many .badge{display:none}.seats.many .av{width:24px;height:24px;font-size:12px}
+.rgrid.few{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:899px){.rgrid.few .rcard .others{display:none}.rgrid.few .rcard{padding:12px 6px 8px}.rgrid.few .rcard .bestbox b{font-size:12px}}
 .scores.many .lb .best{display:none}
 .err{color:var(--bad);text-align:center;min-height:20px}
 #build{position:fixed;right:8px;bottom:6px;font-size:11px;color:var(--muted);opacity:.8;pointer-events:none;z-index:9;max-width:60vw;text-align:right}
@@ -274,6 +292,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   #results.on{grid-template-columns:minmax(0,380px) minmax(0,1fr)}
   .rgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
   .rgrid.few{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .rtable{grid-template-columns:1fr 1fr}
   .hl{grid-template-columns:repeat(3,minmax(0,1fr))}
   #countdown{max-width:640px}
 }
@@ -326,6 +345,19 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .sp-right .ticker .tk .av{width:clamp(26px,1.8vw,50px);height:clamp(26px,1.8vw,50px);font-size:clamp(13px,.9vw,26px)}
 .sp-right .words{width:100%;font-size:clamp(13px,.9vw,24px);color:var(--muted);text-transform:uppercase;line-height:1.6}
 .sp-right .words b{color:var(--ink)}
+.sp-right .scores.many{display:grid;grid-template-columns:1fr 1fr;gap:clamp(4px,.4vw,10px)}
+.sp-right .scores.many .lb{padding:clamp(5px,.5vw,14px) clamp(8px,.7vw,18px);gap:clamp(6px,.5vw,12px)}
+.sp-right .scores.many .lb .nm{font-size:clamp(13px,.95vw,26px)}.sp-right .scores.many .lb .score{font-size:clamp(14px,1.05vw,28px)}
+.sp-right .scores.many .lb .av{width:clamp(24px,1.7vw,44px);height:clamp(24px,1.7vw,44px);font-size:clamp(12px,.85vw,22px)}
+.sp-right .scores.many .lb .medal{width:clamp(20px,1.3vw,34px);height:clamp(20px,1.3vw,34px);font-size:clamp(10px,.7vw,18px)}
+.sp-right .scores.lots .badge{display:none}
+.sp-right .scores.lots{grid-template-columns:repeat(3,1fr)}
+.sp-right .scores.lots .lb{padding:clamp(3px,.3vw,8px) clamp(6px,.5vw,14px);gap:clamp(4px,.4vw,10px);border-radius:clamp(8px,.6vw,16px)}
+.sp-right .scores.lots .lb .nm{font-size:clamp(12px,.8vw,22px)}.sp-right .scores.lots .lb .score{font-size:clamp(12px,.9vw,24px)}
+.sp-right .scores.lots .lb .av{width:clamp(20px,1.3vw,34px);height:clamp(20px,1.3vw,34px);font-size:clamp(10px,.7vw,18px)}
+.sp-right .scores.lots .lb .medal{width:clamp(18px,1.1vw,28px);height:clamp(18px,1.1vw,28px);font-size:clamp(9px,.6vw,16px)}
+.sp-right .scores{flex:none;max-height:66%;overflow:auto;min-height:0}
+.sp-right .scores.many~.bigcard{display:none}
 .sp-right .bigcard{display:block;margin:0;padding:clamp(8px,.8vw,20px) clamp(10px,1vw,26px)}
 .sp-right .big .bf{font-size:clamp(13px,.95vw,26px)}
 .sp-right .big .bf .av{width:clamp(22px,1.5vw,40px);height:clamp(22px,1.5vw,40px);font-size:clamp(11px,.8vw,20px)}
@@ -442,7 +474,7 @@ svg.paths{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
     </div>
   </div>
   <div class="col">
-    <div class="card"><div class="card-h"><span>🏆 Leaderboard</span><span class="r" id="resCount"></span></div><div class="rgrid" id="resSeats"></div></div>
+    <div class="card"><div class="card-h"><span>🏆 Leaderboard</span><span class="r" id="resCount"></span></div><div class="rgrid" id="resSeats"></div><div class="rtable hidden" id="resTable"></div></div>
     <button id="btnRematch" class="primary big">↻ Rematch · same room, new board</button>
     <div id="resWait" class="small">Waiting for the host</div>
     <div class="small"><a href="/" style="color:var(--muted)">Leave room</a></div>
@@ -530,8 +562,14 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 function noteBest(e){if(!e.ok)return;const l=BEST[e.seat_id]||(BEST[e.seat_id]=[]);l.push([e.word,e.delta]);l.sort((a,b)=>b[1]-a[1]);if(l.length>3)l.length=3}
 function bestLine(s,reveal){const l=reveal&&s.words?s.words.slice(0,3):(BEST[s.seat_id]||[]);return l.length?l.map(([w])=>`<b>${esc(w)}</b>`).join(' · '):'<span style="opacity:.6">no words yet</span>'}
 // Leaderboard cards: race screen (right column on desktop, below the board on phones) and projector.
-function lbCards(seats,reveal){return seats.map((s,i)=>`<div class="lb${s.seat_id===ME?' me':''}">${medal(i)}${avatar(s)}<span class="nm">${esc(s.name)}${badge(s)}</span><span class="score">${reveal||S.state!=='lobby'?fmtN(s.score):''}</span><span class="best">${bestLine(s,reveal)}</span></div>`).join('')}
-function renderScores(){if(!S||S.state!=='playing')return;const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);$('playSeats').classList.toggle('many',seats.length>8);$('playSeats').innerHTML=lbCards(seats,false)}
+function lbRow(s,i,reveal){return `<div class="lb${s.seat_id===ME?' me':''}">${medal(i)}${avatar(s)}<span class="nm">${esc(s.name)}${badge(s)}</span><span class="score">${reveal||S.state!=='lobby'?fmtN(s.score):''}</span><span class="best">${bestLine(s,reveal)}</span></div>`}
+// With 8+ seats the phone/desktop board shows top 5 + you pinned + a "show all" toggle; the projector shows everyone in two columns.
+let LB_OPEN=false;
+function lbCards(seats,reveal,full){if(seats.length<=8||full||LB_OPEN)return seats.map((s,i)=>lbRow(s,i,reveal)).join('');
+  const top=seats.slice(0,5);let h=top.map((s,i)=>lbRow(s,i,reveal)).join('');const mi=seats.findIndex(s=>s.seat_id===ME);if(mi>=5)h+=`<div class="lb-gap">···</div>`+lbRow(seats[mi],mi,reveal);
+  return h+`<button class="lb-more" data-lbmore="1">Show all ${seats.length} players ▾</button>`}
+function wireLbMore(el){const b=el.querySelector('[data-lbmore]');if(b)b.onclick=()=>{LB_OPEN=!LB_OPEN;renderScores()};const c=el.querySelector('[data-lbless]');if(c)c.onclick=()=>{LB_OPEN=false;renderScores()}}
+function renderScores(){if(!S||S.state!=='playing')return;const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const el=$('playSeats');el.classList.toggle('many',seats.length>8);el.innerHTML=lbCards(seats,false)+(seats.length>8&&LB_OPEN?`<button class="lb-more" data-lbless="1">Show top 5 ▴</button>`:'');wireLbMore(el);syncMinis(seats)}
 function renderMine(){const me=mySeat();$('myScore').textContent=fmtN(me?me.score:0);$('myCount').textContent=myWords.length;$('myStreak').textContent=myWords.length>=3?'🔥 '+myWords.length+' word streak':'';
   $('myWords').innerHTML=myWords.length?[...myWords].reverse().map(([w,p,t])=>`<div class="w"><b>${esc(w)}</b><span class="p">+${fmtN(p)}</span><span class="t">${fmtAt(t)}</span></div>`).join(''):'<div class="none">Swipe or tap adjacent tiles to build a word</div>'}
 function render(prev){
@@ -539,9 +577,12 @@ function render(prev){
   if(SPECT){renderSpect(prev,changed);return}
   if(st==='lobby'){show('lobby');const join=location.origin+'/r/'+S.code;$('lobbyCode').textContent=S.code;$('lobbyLink').textContent=join;$('lobbyQr').src=QR(join,264);$('lobbySpect').textContent=location.origin+'/s/'+S.code;const h=isHost();$('lobbyCount').textContent=S.seats.length+' seated';$('lobbySeats').innerHTML=S.seats.map(s=>seatRow(s,false,h)).join('');$('lobbySeats').classList.toggle('many',S.seats.length>8);for(const b of $('lobbySeats').querySelectorAll('[data-rm]'))b.onclick=()=>send({type:'remove_seat',seat_id:b.dataset.rm});$('addSeat').classList.toggle('hidden',!h);const sel=$('seatSel');const cur=sel.value;sel.innerHTML=(S.catalog||[]).filter(c=>c.available).map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.label)}</option>`).join('');if(cur)sel.value=cur;$('btnStart').classList.toggle('hidden',!h);$('lobbyWait').classList.toggle('hidden',h);$('lobbyNotice').classList.toggle('hidden',!(S.recreated||S.restored));if(S.recreated)$('lobbyNotice').textContent=`Room ${S.code} was reset by a server update — new lobby, same link`;else if(S.restored)$('lobbyNotice').textContent=`Room ${S.code} restored after a server update — same seats, same link`}
   else if(st==='countdown'){show('countdown');$('cdRound').textContent=S.round+(S.level?' · '+S.level.theme:'');$('cdSeats').innerHTML=S.seats.map(s=>seatRow(s,false)).join('');$('cdSeats').classList.toggle('many',S.seats.length>8)}
-  else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers();buildMinis();renderBig()}show('play');if(!changed&&$('minis').children.length!==S.seats.filter(s=>s.seat_id!==ME&&!s.queued).length)buildMinis();$('playRound').textContent=S.round;$('themeTitle').textContent=levelTitle();$('nPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';const me=mySeat();$('hudWho').innerHTML=me?`${avatar(me)}<span>${esc(me.name)}</span>`:'';const q=!!(me&&me.queued);$('banner').classList.toggle('hidden',!q);if(q)$('banner').textContent="You're in for the next round — this race already started. Watch the board; Rematch seats you.";$('btnSubmit').disabled=q;$('btnClear').disabled=q;for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;if(changed&&me){for(const e of S.ticker)if(e.seat_id===ME&&e.ok)myWords.push([e.word,e.delta,e.t])}renderMine();renderScores();drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
+  else if(st==='playing'){if(changed){myPath=[];myWords=[];cursors={};BEST={};BIG=[];THINK={};SEEN=new Set();feedN=0;$('flash').textContent='';$('ticker').innerHTML='';lastTickerLen=0;buildBoard($('board'),S.board,true);buildFingers();buildMinis();renderBig()}show('play');$('playRound').textContent=S.round;$('themeTitle').textContent=levelTitle();$('nPossible').textContent=S.n_board_words?fmtN(S.n_board_words):'–';const me=mySeat();$('hudWho').innerHTML=me?`${avatar(me)}<span>${esc(me.name)}</span>`:'';const q=!!(me&&me.queued);$('banner').classList.toggle('hidden',!q);if(q)$('banner').textContent="You're in for the next round — this race already started. Watch the board; Rematch seats you.";$('btnSubmit').disabled=q;$('btnClear').disabled=q;for(const e of S.ticker.slice(lastTickerLen))addTick(e,false);lastTickerLen=S.ticker.length;if(changed&&me){for(const e of S.ticker)if(e.seat_id===ME&&e.ok)myWords.push([e.word,e.delta,e.t])}renderMine();renderScores();drawMine();drawOthers();requestAnimationFrame(layoutFingers)}
   else if(st==='results'){show('results');$('resRound').textContent=S.round;if(S.level)$('resSub').textContent=levelTitle();buildBoard($('resBoard'),S.board,false);const seats=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score);const many=seats.length>8;$('resCount').textContent=seats.length+' players';$('resSeats').classList.toggle('few',seats.length<=3);
-    $('resSeats').innerHTML=seats.map((s,i)=>{const w=s.words||[];const best=w[0];const others=w.slice(1,many?3:5);const more=w.length-1-others.length;return `<div class="rcard${i===0?' first':''}${s.seat_id===ME?' me':''}">${i===0?'<span class="crown">👑</span>':''}${medal(i)}${avatar(s)}<div class="nm">${esc(s.name)}</div><div>${badge(s)}</div><div class="rscore">${fmtN(s.score)}</div><div class="rw">${w.length} word${w.length===1?'':'s'}</div>${best?`<div class="bestbox"><small>Best word</small><b>${esc(best[0])}</b><span>(${fmtN(best[1])})</span></div>`:'<div class="bestbox"><small>No words yet</small><b>—</b></div>'}${others.length?`<div class="others"><small>Other words</small><div class="chips">${others.map(([w])=>`<span class="chip">${esc(w)}</span>`).join('')}${more>0?`<span class="chip more">+${more}</span>`:''}</div></div>`:''}</div>`}).join('');
+    const rcard=(s,i)=>{const w=s.words||[];const best=w[0];const others=w.slice(1,many?3:5);const more=w.length-1-others.length;return `<div class="rcard${i===0?' first':''}${s.seat_id===ME?' me':''}">${i===0?'<span class="crown">👑</span>':''}${medal(i)}${avatar(s)}<div class="nm">${esc(s.name)}</div><div>${badge(s)}</div><div class="rscore">${fmtN(s.score)}</div><div class="rw">${w.length} word${w.length===1?'':'s'}</div>${best?`<div class="bestbox"><small>Best word</small><b>${esc(best[0])}</b><span>(${fmtN(best[1])})</span></div>`:'<div class="bestbox"><small>No words yet</small><b>—</b></div>'}${others.length?`<div class="others"><small>Other words</small><div class="chips">${others.map(([w])=>`<span class="chip">${esc(w)}</span>`).join('')}${more>0?`<span class="chip more">+${more}</span>`:''}</div></div>`:''}</div>`};
+    // 8+ players: top-3 podium cards, everyone else in a compact table (you highlighted)
+    const podium=many?seats.slice(0,3):seats;$('resSeats').classList.toggle('few',podium.length<=3);$('resSeats').innerHTML=podium.map(rcard).join('');
+    const tbl=$('resTable');tbl.classList.toggle('hidden',!many);if(many)tbl.innerHTML=seats.slice(3).map((s,i)=>{const w=s.words||[];return `<div class="rt${s.seat_id===ME?' me':''}"><span class="rk">${i+4}</span>${avatar(s)}<span class="nm">${esc(s.name)}${badge(s)}</span><span class="bw">${w[0]?esc(w[0][0]):'—'}</span><span class="nw">${w.length}w</span><span class="sc">${fmtN(s.score)}</span></div>`}).join('');
     const r=S.results&&S.results[0];if(r){$('resN').textContent=fmtN(r.n_board_words);$('resMax').textContent=fmtN(r.max_score);$('resBest').innerHTML=r.best_words.slice(0,6).map(w=>`<div class="lw">${esc(w.toUpperCase())}<span>${w.length}</span></div>`).join('')}
     const top=seats[0];$('resTop').textContent=top?fmtN(top.score):'–';$('resTopWho').textContent=top?top.name+(top.kind==='ai'?' · AI':' · human'):'';const h=isHost();$('btnRematch').classList.toggle('hidden',!h);$('resWait').classList.toggle('hidden',h)}
 }
@@ -549,7 +590,7 @@ function ringSet(fgId,ringId,left){const total=S.race_s||75;const fg=$(fgId);if(
 setInterval(()=>{if(!S)return;const left=Math.max(0,S.phase_ends_at-now());if(S.state==='countdown'){$('cdNum').textContent=Math.ceil(left);if(SPECT)$('spBig').textContent=Math.ceil(left)}else if(S.state==='playing'){$('timer').textContent=fmtT(left);ringSet('ringFg','ring',left);if(SPECT){$('spTimer').textContent=fmtT(left);ringSet('spRingFg','spRing',left)}}},100);
 
 // ---------- spectator / projector ----------
-function renderSpSeats(){const reveal=S.state==='results';const seats=[...S.seats].filter(s=>!s.queued||S.state==='lobby').sort((a,b)=>b.score-a.score);$('spSeats').classList.toggle('many',seats.length>8);$('spSeats').innerHTML=lbCards(seats,reveal)}
+function renderSpSeats(){const reveal=S.state==='results';const seats=[...S.seats].filter(s=>!s.queued||S.state==='lobby').sort((a,b)=>b.score-a.score);$('spSeats').classList.toggle('many',seats.length>8);$('spSeats').classList.toggle('lots',seats.length>16);$('spSeats').innerHTML=lbCards(seats,reveal,true)}
 function renderSpect(prev,changed){show('spect');const st=S.state;$('spCode').textContent=S.code;const join=location.origin+'/r/'+S.code;$('spJoin').textContent=join.replace(/^https?:\/\//,'');$('spQr').src=QR(join,400);const l=$('spLive');l.classList.toggle('on',st==='playing');l.lastElementChild.textContent=LIVE[st]||'';
   const slot=$('spBoardSlot');if(!slot.contains($('boardwrap'))){slot.appendChild($('boardwrap'));$('spTickerSlot').appendChild($('ticker'))}
   const showBoard=st==='playing'||st==='results';$('boardwrap').classList.toggle('hidden',!showBoard);slot.classList.toggle('hidden',!showBoard);$('ticker').classList.toggle('hidden',!showBoard);$('spFeedTitle').classList.toggle('hidden',!showBoard);
@@ -598,7 +639,11 @@ function cssId(s){return s.replace(/[^a-zA-Z0-9]/g,'_')}
 function layoutFingers(){drawOthers()}
 function drawOthers(){if(!S||S.state!=='playing')return;for(const s of S.seats){if(s.seat_id===ME)continue;const d=$('f_'+cssId(s.seat_id));if(!d)continue;const c=cursors[s.seat_id];if(c&&c.tile!=null){const [x,y]=tileCenter(c.tile);d.style.transform=`translate(${x}px,${y}px)`;d.classList.add('on');d.classList.remove('idle')}else if(d.style.transform){d.classList.add('on','idle')}else{d.classList.remove('on')}}drawPaths();drawMinis()}
 // ---------- per-seat mini boards (desktop >=1200px): every other seat's live path on its own tiny board ----------
-function buildMinis(){const m=$('minis');if(!m)return;m.innerHTML='';for(const s of S.seats){if(s.seat_id===ME||s.queued)continue;const d=document.createElement('div');d.className='mini';d.id='mini_'+cssId(s.seat_id);d.innerHTML=`<div class="mh"><span class="medal">·</span>${avatar(s)}<span class="nm">${esc(s.name)}${badge({...s,seat_id:''})}</span><span class="score">${fmtN(s.score)}</span></div><div class="mb">${[...S.board].map(ch=>`<span class="mt">${ch}</span>`).join('')}</div><div class="mw"></div>`;m.appendChild(d)}}
+const MINI_MAX=6;
+function miniSeats(seats){return (seats||[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score)).filter(s=>s.seat_id!==ME).slice(0,MINI_MAX)}
+// Rebuild the mini-board column when the top-6 set changes (rank changes inside the set only re-sort via drawMinis).
+function syncMinis(seats){const m=$('minis');if(!m||!m.offsetParent)return;const want=miniSeats(seats).map(s=>'mini_'+cssId(s.seat_id)).sort().join();const have=[...m.children].map(d=>d.id).sort().join();if(want!==have)buildMinis()}
+function buildMinis(){const m=$('minis');if(!m)return;m.innerHTML='';for(const s of miniSeats()){const d=document.createElement('div');d.className='mini';d.id='mini_'+cssId(s.seat_id);d.innerHTML=`<div class="mh"><span class="medal">·</span>${avatar(s)}<span class="nm">${esc(s.name)}${badge({...s,seat_id:''})}</span><span class="score">${fmtN(s.score)}</span></div><div class="mb">${[...S.board].map(ch=>`<span class="mt">${ch}</span>`).join('')}</div><div class="mw"></div>`;m.appendChild(d)}}
 function drawMinis(){const m=$('minis');if(!m||!m.children.length||!m.offsetParent)return;const order=[...S.seats].filter(s=>!s.queued).sort((a,b)=>b.score-a.score).map(s=>s.seat_id);
   for(const s of S.seats){const d=$('mini_'+cssId(s.seat_id));if(!d)continue;const p=(cursors[s.seat_id]||{}).path||[];const tiles=d.querySelectorAll('.mt');for(let i=0;i<16;i++){tiles[i].classList.toggle('on',p.includes(i));tiles[i].classList.toggle('tip',p[p.length-1]===i)}
     d.querySelector('.score').textContent=fmtN(s.score);const r=order.indexOf(s.seat_id);d.querySelector('.medal').textContent=r<0?'·':r+1;d.querySelector('.medal').className='medal '+(r>=0&&r<3?'m'+(r+1):'');const w=d.querySelector('.mw');w.innerHTML=p.length>=2?`building <b>${p.map(i=>S.board[i]).join('').toUpperCase()}</b>`:bestLine(s,false)}}
@@ -613,7 +658,15 @@ function drawPaths(){const svg=$('paths');if(!S||!$('board').children.length)ret
 window.addEventListener('resize',()=>requestAnimationFrame(drawOthers));
 
 // ---------- game feed ----------
-function addTick(e,prepend){if(!e.think){const k=e.seat_id+'|'+e.word+'|'+e.t+'|'+e.ok;if(SEEN.has(k))return;SEEN.add(k);noteBest(e);noteBig(e)}const t=$('ticker');const s=S&&S.seats.find(x=>x.seat_id===e.seat_id);const kind=s?s.kind:'human';const d=document.createElement('div');d.className='tk'+(e.think?' think':e.ok?'':' miss');
+// With many seats the feed would scroll past reading speed: others' misses and thinking lines are dropped,
+// and finds are queued and flushed at most FEED_MAX_PER_FLUSH per 700 ms with the overflow merged into one line.
+let FEEDQ=[];const FEED_MAX_PER_FLUSH=3;
+function manySeats(){return S&&S.seats.filter(s=>!s.queued).length>8}
+function addTick(e,prepend){if(!e.think){const k=e.seat_id+'|'+e.word+'|'+e.t+'|'+e.ok;if(SEEN.has(k))return;SEEN.add(k);noteBest(e);noteBig(e)}
+  if(manySeats()&&e.seat_id!==ME){if(e.think||!e.ok)return;if(prepend){FEEDQ.push(e);return}}
+  feedRow(e)}
+setInterval(()=>{if(!FEEDQ.length)return;const batch=FEEDQ.splice(0,FEED_MAX_PER_FLUSH);for(const e of batch)feedRow(e);if(FEEDQ.length){const rest=FEEDQ.splice(0);const pts=rest.reduce((a,e)=>a+e.delta,0);const t=$('ticker');const d=document.createElement('div');d.className='tk merged';d.innerHTML=`<span class="av">✨</span><div class="body"><div class="msg">+${rest.length} more finds by ${new Set(rest.map(e=>e.name)).size} players<span class="pts">+${fmtN(pts)}</span></div></div>`;t.prepend(d)}},700);
+function feedRow(e){const t=$('ticker');const s=S&&S.seats.find(x=>x.seat_id===e.seat_id);const kind=s?s.kind:'human';const d=document.createElement('div');d.className='tk'+(e.think?' think':e.ok?'':' miss');
   const msg=e.think?`🤔 Thinking… <b class="m">${esc(e.word)}</b>?`:e.ok?`✨ Found <b class="${e.masked?'m':''}">${esc(e.word)}</b><span class="pts">+${fmtN(e.delta)}</span>`:`Tried <b class="${e.masked?'m':''}">${esc(e.word)}</b> · ${e.reason==='dup'?'already found':e.reason==='closed'?'too late':'not a word'}`;
   d.innerHTML=`<span class="av ${kind==='ai'?'ai':'hu'}" style="border-color:${e.color}">${kind==='ai'?'🤖':'🧑'}</span><div class="body"><div class="top"><span class="who" style="color:${e.color}">${esc(e.name)}</span>${s?badge({...s,seat_id:''}):''}<span class="ts">${e.t!=null?fmtAt(e.t):''}</span></div><div class="msg">${msg}</div></div>`;
   t.prepend(d);while(t.children.length>60)t.lastChild.remove();if(!e.think){feedN++;const fc=$('feedCount');if(fc)fc.textContent=feedN+' events'}}

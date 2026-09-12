@@ -149,18 +149,24 @@ async def host_start(ws_url: str, pid: str, name: str, n_wait: int, timeout: flo
         await ws.send(json.dumps({"type": "hello", "player_id": pid, "name": name}))
         t0 = time.time()
         started = False
-        async for raw in ws:
-            m = json.loads(raw)
-            if m["type"] == "welcome":
-                seated.set()
-            if m["type"] == "state":
-                humans = sum(1 for s in m["seats"] if s["kind"] == "human")
-                if not started and m["state"] == "lobby" and (humans >= n_wait or time.time() - t0 > timeout):
-                    print(f"[host] {humans} humans seated after {time.time()-t0:.1f}s -> Start", flush=True)
-                    await ws.send(json.dumps({"type": "start"}))
-                    started = True
-                if m["state"] == "results":
-                    return m
+        humans, state = 0, ""
+        while True:
+            try:
+                m = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
+            except asyncio.TimeoutError:
+                m = None
+            if m:
+                if m["type"] == "welcome":
+                    seated.set()
+                if m["type"] == "state":
+                    state = m["state"]
+                    humans = sum(1 for s in m["seats"] if s["kind"] == "human")
+                    if state == "results":
+                        return m
+            if not started and state == "lobby" and (humans >= n_wait or time.time() - t0 > timeout):
+                print(f"[host] {humans} humans seated after {time.time()-t0:.1f}s -> Start", flush=True)
+                await ws.send(json.dumps({"type": "start"}))
+                started = True
 
 
 async def cap_probe(ws_url: str, run_id: str) -> str:
