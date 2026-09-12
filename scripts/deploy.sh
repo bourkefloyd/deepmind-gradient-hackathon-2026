@@ -54,17 +54,25 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudb
 #   GEMMA_BASE_URL (OpenAI-compatible, e.g. http://LAMBDA_IP:8000/v1), GEMMA_API_KEY, GEMMA_MODELS
 #   or GEMMA_SEATS (JSON list of {id,name,model,base_url,api_key,label}); NANO_CKPT for the nano seat.
 #   WH_SEATS (default lineup, e.g. "nano,reflex-a"), WH_NANO_TEMPERATURE, WH_NANO_THINK
-#   WH_INTEGRATIONS=1 mounts Secret Manager `nango-secret-key` as NANGO_SECRET_KEY and sets WH_PUBLIC_URL.
+#   Discord via Nango: on by default when Secret Manager `nango-secret-key` exists (mounted as NANGO_SECRET_KEY,
+#   WH_INTEGRATIONS=1, WH_PUBLIC_URL=<service url>); WH_INTEGRATIONS=0 disables. NANGO_CONNECTION_ID etc. pass through.
 ENV_VARS="WH_BUILD=$BUILD_LABEL"
 for v in GEMMA_BASE_URL GEMMA_API_KEY GEMMA_MODELS GEMMA_SEATS NANO_CKPT WH_NANO_TEMPERATURE WH_NANO_THINK WH_SEATS WH_MAX_HUMANS WH_INTEGRATIONS \
          NANGO_CONNECTION_ID NANGO_DISCORD_INTEGRATION_ID NANGO_PROVIDER_CONFIG_KEY NANGO_DISCORD_RECAP_ACTION NANGO_BASE_URL DISCORD_CHANNEL_ID WH_INTEGRATIONS_TIMEOUT_S; do
   if [[ -n "${!v:-}" ]]; then ENV_VARS="$ENV_VARS|$v=${!v}"; fi
 done
 EXISTING_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)' 2>/dev/null || true)"
+# Discord/Nango integration is on by default when the Secret Manager secret exists; WH_INTEGRATIONS=0 disables.
+SECRET_NAME="${NANGO_SECRET_NAME:-nango-secret-key}"
 SECRET_FLAGS=()
-if [[ "${WH_INTEGRATIONS:-0}" == "1" ]]; then
-  ENV_VARS="$ENV_VARS|WH_PUBLIC_URL=${WH_PUBLIC_URL:-$EXISTING_URL}"
-  SECRET_FLAGS=(--update-secrets "NANGO_SECRET_KEY=${NANGO_SECRET_NAME:-nango-secret-key}:latest")
+if [[ "${WH_INTEGRATIONS:-1}" == "1" ]]; then
+  if gcloud secrets describe "$SECRET_NAME" >/dev/null 2>&1; then
+    [[ "$ENV_VARS" == *"|WH_INTEGRATIONS="* ]] || ENV_VARS="$ENV_VARS|WH_INTEGRATIONS=1"
+    ENV_VARS="$ENV_VARS|WH_PUBLIC_URL=${WH_PUBLIC_URL:-$EXISTING_URL}"
+    SECRET_FLAGS=(--update-secrets "NANGO_SECRET_KEY=$SECRET_NAME:latest")
+  else
+    echo "warn: secret $SECRET_NAME not found (or no access); deploying without Discord integration"
+  fi
 fi
 
 SOURCE_FLAGS=(--source .)
