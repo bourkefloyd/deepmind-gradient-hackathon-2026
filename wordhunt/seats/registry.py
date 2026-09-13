@@ -71,10 +71,12 @@ def build_catalog() -> list[SeatSpec]:
                           available=nano_seat.available(), default=True))
     specs.append(SeatSpec("crowd", "Crowd", "casual bot · random name", crowd.make, namer=crowd.pick_name))
 
-    for g in gemma_seats_from_env():
-        specs.append(SeatSpec(g["id"], g.get("name", g["id"]), g.get("label", "gemma"),
-                              (lambda g: lambda solver, rng: (GemmaPolicy(g["base_url"], g["model"], g.get("api_key", ""), rng,
-                                                                          thinking=bool(g.get("thinking", False))), GEMMA_PROFILE))(g)))
+    # Gemma 12B seat is parked: Lambda vLLM is down. Hosts cannot add it.
+    # Re-enable by uncommenting and setting GEMMA_BASE_URL + GEMMA_MODELS (or GEMMA_SEATS).
+    # for g in gemma_seats_from_env():
+    #     specs.append(SeatSpec(g["id"], g.get("name", g["id"]), g.get("label", "gemma"),
+    #                           (lambda g: lambda solver, rng: (GemmaPolicy(g["base_url"], g["model"], g.get("api_key", ""), rng,
+    #                                                                       thinking=bool(g.get("thinking", False))), GEMMA_PROFILE))(g)))
     return specs
 
 

@@ -53,13 +53,14 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudb
 # Env for the revision. '|' delimiter because GEMMA_MODELS is a comma list.
 #   GEMMA_BASE_URL (OpenAI-compatible, e.g. http://LAMBDA_IP:8000/v1), GEMMA_API_KEY, GEMMA_MODELS
 #   or GEMMA_SEATS (JSON list of {id,name,model,base_url,api_key,label}); NANO_CKPT for the nano seat.
-#   WH_SEATS (default lineup, e.g. "nano,reflex-a"), WH_NANO_TEMPERATURE, WH_NANO_THINK
+#   WH_SEATS (default lineup; nano-only unless overridden), WH_NANO_TEMPERATURE, WH_NANO_THINK
 #   Discord via Nango: on by default when Secret Manager `nango-secret-key` exists (mounted as NANGO_SECRET_KEY,
 #   WH_INTEGRATIONS=1, WH_PUBLIC_URL=<service url>); WH_INTEGRATIONS=0 disables. NANGO_CONNECTION_ID etc. pass through.
 #   Respan gateway: on by default when Secret Manager `respan-api-key` exists (mounted as RESPAN_API_KEY,
 #   RESPAN_ENABLED=1, RESPAN_ENV=cloud-run); RESPAN_ENABLED=0 disables. RESPAN_BASE_URL / RESPAN_MODEL pass through.
 # Room persistence bucket (rooms survive deploys); WH_ROOM_STORE overrides, e.g. gs://bucket/prefix or file:/dir.
 ROOM_STORE="${WH_ROOM_STORE:-gs://$PROJECT-wordhunt-rooms}"
+WH_SEATS="${WH_SEATS:-nano}"
 ENV_VARS="WH_BUILD=$BUILD_LABEL|WH_ROOM_STORE=$ROOM_STORE"
 if [[ "$ROOM_STORE" == gs://* ]]; then
   BUCKET="${ROOM_STORE#gs://}"; BUCKET="${BUCKET%%/*}"
