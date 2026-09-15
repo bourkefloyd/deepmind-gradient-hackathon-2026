@@ -14,11 +14,11 @@ Word Hunt also doubles as a human-calibrated evaluation arena. Every agent is me
 
 **Same environment. Same actions. Same clock. Frontier teacher -> tiny policy.**
 
-Team **wordhunt**, Open Model Hack, San Francisco, 2026-09-12. Submission: [docs/submission.md](docs/submission.md). Architecture: [docs/architecture.md](docs/architecture.md). Full plan: [PLAN.md](PLAN.md).
+Team **wordhunt**, Open Model Hack, San Francisco, 2026-09-12. Submission: [docs/submission.md](docs/submission.md). Architecture: [docs/architecture.md](docs/architecture.md). World of rooms (MMO grid): [docs/mmo-world.md](docs/mmo-world.md). Full plan: [PLAN.md](PLAN.md).
 
 ## Quickstart
 
-Run locally: `make setup && make words && make serve` (players at `/r/CODE`, projector at `/s/CODE`); the nano seat needs torch + numpy (`make setup` installs them) and `NANO_CKPT=nano/checkpoints/d6_lambda.pt`. Live demo: https://wordhunt-pngitthrva-uw.a.run.app. Runbook: [docs/demo-runbook.md](docs/demo-runbook.md); more commands in [docs/architecture.md §6](docs/architecture.md#6-repo-map-runbook-local-vs-cloud).
+Run locally: `make setup && make words && make serve` (players at `/r/CODE`, projector at `/s/CODE`, live match grid at `/world`); the nano seat needs torch + numpy (`make setup` installs them) and `NANO_CKPT=nano/checkpoints/d6_lambda.pt`. Live demo: https://wordhunt-pngitthrva-uw.a.run.app. Runbook: [docs/demo-runbook.md](docs/demo-runbook.md); more commands in [docs/architecture.md §6](docs/architecture.md#6-repo-map-runbook-local-vs-cloud).
 
 ## Original pitch and build plan (2026-09-12 morning)
 

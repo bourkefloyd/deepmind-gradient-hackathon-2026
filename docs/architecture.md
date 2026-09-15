@@ -1,6 +1,6 @@
 # Word Hunt arena: architecture
 
-Everything built so far, as it is on `main` (read from the code on 2026-09-12, `0c781ac`). Where the code and the plan disagree, this doc follows the code and says so. Companion docs: [PLAN.md](../PLAN.md) (the pitch and decisions), [docs/league.md](league.md) (AI-only league table), [docs/talk-nano-slide.md](talk-nano-slide.md) (the three numbers for the talk), [docs/nanoagent-handoff.md](nanoagent-handoff.md) (prior work), [docs/gemma4-local-vision-findings.md](gemma4-local-vision-findings.md) (why mlx-vlm, not Ollama).
+Everything built so far, as it is on `main` (read from the code on 2026-09-12, `0c781ac`). Where the code and the plan disagree, this doc follows the code and says so. Companion docs: [PLAN.md](../PLAN.md) (the pitch and decisions), [docs/mmo-world.md](mmo-world.md) (world of rooms / MMO grid), [docs/league.md](league.md) (AI-only league table), [docs/talk-nano-slide.md](talk-nano-slide.md) (the three numbers for the talk), [docs/nanoagent-handoff.md](nanoagent-handoff.md) (prior work), [docs/gemma4-local-vision-findings.md](gemma4-local-vision-findings.md) (why mlx-vlm, not Ollama).
 
 Contents: [Concept](#concept-frontier-teacher---tiny-policy) · [1. System overview](#1-system-overview) · [2. Game loop](#2-game-loop) · [3. Nano seat](#3-nano-seat) · [4. Gemma 12B seat](#4-gemma-12b-seat) · [5. Integrations](#5-integrations-nango--discord) · [6. Repo map, runbook, local vs cloud](#6-repo-map-runbook-local-vs-cloud) · [7. Known gaps](#7-known-gaps-and-discrepancies)
 
@@ -88,7 +88,7 @@ flowchart LR
 
 Key facts (all from the code):
 
-- **Server** `wordhunt/server.py`: `GET /`, `/r/{code}`, `/s/{code}` all serve `static/index.html`; `POST /api/rooms` creates a room with a 4-character code (alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`); `GET /api/rooms/{code}` returns the snapshot; `GET /api/health` returns `{ok, words, rooms, build}`; `GET /api/build` returns the `WH_BUILD` label; `WS /ws/{code}` is the game socket. Rooms live in a module-level dict; rooms with no connected humans are garbage-collected after 3 h (`ROOM_TTL_S`), checked on room creation.
+- **Server** `wordhunt/server.py`: `GET /`, `/r/{code}`, `/s/{code}` all serve `static/index.html`; `GET /world` serves `static/world.html` (paginated match grid); `GET /api/world` returns cheap room cards from the in-memory `rooms` dict (see [docs/mmo-world.md](mmo-world.md)); `POST /api/rooms` creates a room with a 4-character code (alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`); `GET /api/rooms/{code}` returns the snapshot; `GET /api/health` returns `{ok, words, rooms, build}` plus a smaller `room_list`; `GET /api/build` returns the `WH_BUILD` label; `WS /ws/{code}` is the game socket. Rooms live in a module-level dict; rooms with no connected humans are garbage-collected after 3 h (`ROOM_TTL_S`), checked on room creation.
 - **Client** `static/index.html`: one page, no build step. Identity is an anonymous `wh_pid` in `localStorage` plus an editable name. `/s/CODE` sets spectator mode (hello with `role: "spectator"`, no seat). Reconnects every 1.2 s on close. The projector QR is fetched from `api.qrserver.com` (external dependency).
 - **WebSocket protocol** (client → server): `hello{player_id,name}` or `hello{role:"spectator"}`, `name`, `start`, `rematch`, `add_seat{spec_id}`, `remove_seat{seat_id}`, `path{path}`, `submit{path}`, `ping`. Server → client: `welcome`, `state` (full snapshot), `cursors` (fingers), `tick` (one ticker entry), `mine` (result of my submit, with `total`), `pong`, `error{fatal?}`.
 - **Host**: the first connected human; `can_control()` is true for the host or for anyone once the host has disconnected. In the lobby a disconnecting human is removed and host passes to the next connected human.
@@ -489,7 +489,8 @@ wordhunt/               game server (ships to Cloud Run)
   seats/gemma.py        OpenAI-compatible Gemma seat (server side) + env parsing
   seats/nano.py         NanoPolicy adapter around nano.policy.StudentPolicy, NANO_CKPT gate
   seats/registry.py     SeatSpec catalog, hand profiles
-static/index.html       the whole client: home, lobby, countdown, play, results, spectator
+static/index.html       the room client: home, lobby, countdown, play, results, spectator
+static/world.html       /world match grid (cards from GET /api/world; zoom = /s/CODE or /r/CODE)
 nano/                   the hero model (Mac-side today)
   solver.py             nano's own trie solver (all paths per word, trie-node access)
   data.py               boards -> per-prefix soft targets (.npz)
@@ -517,7 +518,7 @@ scripts/deploy.sh       tagged Cloud Run revision via crane; scripts/promote.sh 
 Dockerfile              source-mode image (DEPLOY_MODE=source); word lists fetched at build
 Makefile                setup, words, check-mps, data/train, mlxvlm-up/status/stop, gemma-seat
 data/                   boards.json (10 packed boards, committed); enable1.txt, common-30k.txt (downloaded, gitignored)
-docs/                   this file, league.*, talk-nano-slide.md, nanoagent-handoff.md, gemma4-local-vision-findings.md
+docs/                   this file, mmo-world.md, league.*, talk-nano-slide.md, nanoagent-handoff.md, gemma4-local-vision-findings.md
 PLAN.md, README.md      the plan, build order, checklists
 ```
 
@@ -528,7 +529,7 @@ Three solver implementations exist on purpose for now (`wordhunt/solver.py` retu
 | task | command |
 |---|---|
 | word lists | `make words` (or the `curl` lines in `data/README.md`) |
-| run the server locally | `uvicorn wordhunt.server:app --port 8000` (client at `http://localhost:8000`, room at `/r/CODE`, projector at `/s/CODE`) |
+| run the server locally | `uvicorn wordhunt.server:app --port 8000` (client at `http://localhost:8000`, room at `/r/CODE`, projector at `/s/CODE`, match grid at `/world`) |
 | enable the nano locally | `pip install torch numpy` then `NANO_CKPT=nano/checkpoints/d6_s0.pt uvicorn ...` (`NANO_TEMPERATURE=1.0`) |
 | deploy a playtest build | `scripts/deploy.sh iter4` → prints the tag URL and curls `/api/health`; `REGION`, `SERVICE`, `REPO`, `DEPLOY_MODE`, `GCP_SA_KEY_JSON` env; forwards `GEMMA_*`, `NANO_CKPT`, `NANO_TEMPERATURE`, `WH_MAX_HUMANS` |
 | promote to the demo link | `scripts/promote.sh iter4` |
