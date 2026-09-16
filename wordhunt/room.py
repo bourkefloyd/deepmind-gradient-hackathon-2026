@@ -246,6 +246,44 @@ class Room:
     def humans_connected(self) -> int:
         return sum(1 for s in self.seats.values() if s.kind == "human" and s.sockets)
 
+    def world_card(self, now: float | None = None) -> dict:
+        """Cheap lobby-card for GET /api/world. No ticker, cursors, catalog, or seat lists."""
+        now = self.now() if now is None else now
+        ai_count = sum(1 for s in self.seats.values() if s.kind == "ai")
+        leader = None
+        top_score = 0
+        if self.seats:
+            best = max(self.seats.values(), key=lambda s: (s.score, s.kind == "human"))
+            top_score = best.score
+            if top_score > 0:
+                leader = {"name": best.name, "score": best.score, "kind": best.kind}
+        level = self.level.public() if self.level else None
+        theme = level["theme"] if level else None
+        if theme is None and self.state in ("lobby", "results"):
+            nxt = level_for_round(get_levels(), self.round_no + 1)
+            if nxt:
+                level = {**nxt.public(), "upcoming": True}
+                theme = nxt.theme
+        remaining_s = None
+        if self.state in ("countdown", "playing") and self.phase_ends_at:
+            remaining_s = max(0, int(self.phase_ends_at - now))
+        return {
+            "code": self.code,
+            "state": self.state,
+            "round": self.round_no,
+            "humans": self.humans_connected,
+            "ai_count": ai_count,
+            "top_score": top_score,
+            "leader": leader,
+            "theme": theme,
+            "level": level,
+            "quiet": self.quiet,
+            "age_s": int(now - self.created_at),
+            "remaining_s": remaining_s,
+            "spectators": len(self.spectators),
+            "joinable": self.n_humans < MAX_HUMANS,
+        }
+
     # ---- snapshot / io ----------------------------------------------------------------------
     def now(self) -> float:
         return time.time()

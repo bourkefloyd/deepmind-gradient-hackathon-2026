@@ -96,8 +96,11 @@ smoke: $(WORDS) ## Boot the server on a scratch port, hit /api/health + /api/roo
 	echo "room:      $$code"; \
 	info=$$(curl -fsS "http://127.0.0.1:$$port/api/rooms/$$code"); \
 	echo "snapshot:  $$info"; \
-	curl -fsS -o /dev/null "http://127.0.0.1:$$port/" && curl -fsS -o /dev/null "http://127.0.0.1:$$port/r/$$code" && curl -fsS -o /dev/null "http://127.0.0.1:$$port/s/$$code"; \
-	echo "index:     ok (/, /r/$$code, /s/$$code)"; \
+	curl -fsS -o /dev/null "http://127.0.0.1:$$port/" && curl -fsS -o /dev/null "http://127.0.0.1:$$port/r/$$code" && curl -fsS -o /dev/null "http://127.0.0.1:$$port/s/$$code" && curl -fsS -o /dev/null "http://127.0.0.1:$$port/world"; \
+	echo "index:     ok (/, /r/$$code, /s/$$code, /world)"; \
+	world=$$(curl -fsS "http://127.0.0.1:$$port/api/world"); \
+	echo "world:     $$world"; \
+	echo "$$world" | .venv/bin/python -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["total"]>=1 and any(x["code"]==sys.argv[1] for x in d["rooms"])' "$$code"; \
 	curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$$port/api/rooms/NOPE" | grep -q '^404$$' && echo "404:       ok (unknown room)"; \
 	echo -e "$(GREEN)smoke passed.$(RESET)"
 

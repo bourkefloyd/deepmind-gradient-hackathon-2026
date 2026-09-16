@@ -18,9 +18,15 @@ from .solver import get_solver
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 INDEX = os.path.join(STATIC_DIR, "index.html")
 LAB = os.path.join(STATIC_DIR, "lab", "index.html")
+WORLD = os.path.join(STATIC_DIR, "world.html")
 ROOM_TTL_S = 3 * 3600
 NAME_RE = re.compile(r"[^\w \-\.]+")
 CODE_RE = re.compile(r"^[A-Z0-9]{4}$")
+WORLD_PAGE = 24
+WORLD_PAGE_MAX = 48
+# Reserved for BOU-31 (bot filler). The worker is not in this MVP; the knob is documented only.
+WORLD_FILL_N = int(os.environ.get("WH_WORLD_FILL_N", "0") or 0)
+_STATE_RANK = {"playing": 0, "countdown": 1, "results": 2, "lobby": 3}
 
 app = FastAPI(title="Word Hunt VS")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -118,6 +124,59 @@ async def index():
 @app.get("/lab")
 async def lab_page():
     return FileResponse(LAB)
+
+
+@app.get("/world")
+async def world_page():
+    return FileResponse(WORLD)
+
+
+def _query_int(raw: str | None, default: int) -> int:
+    try:
+        return int(raw) if raw is not None and raw != "" else default
+    except (TypeError, ValueError):
+        return default
+
+
+def world_index(now: float | None = None, offset: int = 0, limit: int = WORLD_PAGE,
+                state: str = "", quiet: str | None = None) -> dict:
+    """Paginated cheap cards from the in-memory room dict. No Redis / World WS."""
+    now = time.time() if now is None else now
+    offset = max(0, offset)
+    limit = max(1, min(limit, WORLD_PAGE_MAX))
+    state = (state or "").strip().lower()
+    cards = []
+    for r in rooms.values():
+        if state and r.state != state:
+            continue
+        if quiet == "1" and not r.quiet:
+            continue
+        if quiet == "0" and r.quiet:
+            continue
+        cards.append(r.world_card(now))
+    cards.sort(key=lambda c: (_STATE_RANK.get(c["state"], 9), -c["humans"], -c["top_score"], c["code"]))
+    total = len(cards)
+    page = cards[offset:offset + limit]
+    return {
+        "ok": True,
+        "rooms": page,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + limit < total,
+        "filler": {"target": WORLD_FILL_N, "enabled": False},
+    }
+
+
+@app.get("/api/world")
+async def api_world(request: Request):
+    q = request.query_params
+    return world_index(
+        offset=_query_int(q.get("offset"), 0),
+        limit=_query_int(q.get("limit"), WORLD_PAGE),
+        state=q.get("state") or "",
+        quiet=q.get("quiet"),
+    )
 
 
 @app.get("/r/{code}")

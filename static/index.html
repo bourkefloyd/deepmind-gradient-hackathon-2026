@@ -393,6 +393,7 @@ body:not(.board-avatars) .fingers .finger{display:none}
 <header class="topbar">
   <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#052b14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></span><div><b>Word Hunt <em>VS</em></b><span class="tag">Humans vs AI</span></div></div>
   <div class="pills">
+    <a href="/world" class="pill lab-link">World</a>
     <a href="/lab" target="_blank" rel="noopener" class="pill lab-link">Lab (Deep Dive)</a>
     <div class="hidden" id="topRoom">
       <div class="pill"><span class="lbl">room</span><b id="topCode"></b><button id="btnCopy" title="Copy join link" aria-label="Copy join link">⧉</button></div>
@@ -417,6 +418,9 @@ body:not(.board-avatars) .fingers .finger{display:none}
       <input id="joinCode" class="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" inputmode="text">
       <button id="btnJoin">Join</button>
     </div>
+  </div>
+  <div class="card">
+    <a href="/world" class="pill lab-link" style="display:flex;justify-content:center;width:100%;min-height:48px;border-radius:14px">Browse live matches →</a>
   </div>
   <div id="homeErr" class="err"></div>
 </section>

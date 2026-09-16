@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070b16">
+<title>Word Hunt VS — World</title>
+<style>
+:root{--bg:#070b16;--panel:#0d1424;--panel2:#131c31;--line:#1c2a47;--ink:#eef2fb;--muted:#8391ad;--accent:#2ee87a;--accent-ink:#052b14;--blue:#3b9dff;--bad:#ff5d6c;--gold:#f5b301;--ai:#3b9dff;--hu:#2ee87a}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;min-height:100%;background:radial-gradient(1200px 600px at 50% -10%,#0f1a33 0%,var(--bg) 60%) fixed,var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+body{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px 8px;width:100%;max-width:1160px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;line-height:1.1;color:inherit;text-decoration:none}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--accent);display:grid;place-items:center;flex:none;box-shadow:0 0 18px rgba(46,232,122,.35)}
+.logo svg{width:22px;height:22px}
+.brand b{font-size:19px;font-weight:900;letter-spacing:.2px;white-space:nowrap;display:block}
+.brand em{font-style:normal;color:var(--accent)}
+.brand .tag{color:var(--muted);font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap;display:block;margin-top:2px}
+.pills{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 11px;font-size:13px;color:var(--muted);white-space:nowrap;min-height:38px;text-decoration:none;font-weight:600}
+.pill:hover,.pill.on{color:var(--accent);border-color:rgba(46,232,122,.4)}
+.wrap{width:100%;max-width:1160px;margin:0 auto;padding:8px 16px 32px;flex:1}
+.hero{padding:18px 0 8px}
+.hero h1{font-size:clamp(32px,8vw,48px);margin:0;letter-spacing:.3px;line-height:1.1}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero .sub{color:var(--muted);margin:8px 0 0;font-size:15px}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:16px 0}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font:inherit;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;min-height:38px}
+.chip.on{background:rgba(46,232,122,.12);color:var(--accent);border-color:rgba(46,232,122,.45)}
+.meta{color:var(--muted);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:196px}
+.card.playing{border-color:rgba(46,232,122,.4)}
+.card.countdown{border-color:rgba(245,179,1,.4)}
+.card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.code{font-size:28px;font-weight:800;letter-spacing:4px}
+.st{font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;padding:3px 7px;border-radius:6px}
+.st.playing{background:rgba(46,232,122,.15);color:var(--accent)}
+.st.countdown{background:rgba(245,179,1,.16);color:var(--gold)}
+.st.results{background:rgba(59,157,255,.15);color:var(--blue)}
+.st.lobby{background:var(--panel2);color:var(--muted)}
+.theme{color:var(--gold);font-weight:700;font-size:14px;min-height:1.2em}
+.theme:empty{display:none}
+.stats{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--muted);font-size:13px}
+.stats b{color:var(--ink);font-variant-numeric:tabular-nums}
+.leader{font-size:13px;color:var(--muted)}
+.leader b{color:var(--ink)}
+.actions{display:flex;gap:8px;margin-top:auto}
+button,a.btn{font:inherit;border:0;border-radius:12px;padding:10px 12px;font-size:14px;font-weight:700;color:#fff;background:var(--panel2);border:1px solid var(--line);cursor:pointer;text-decoration:none;text-align:center;flex:1;min-height:44px;display:grid;place-items:center}
+a.btn.primary,button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+a.btn:hover{filter:brightness(1.08)}
+.empty{background:var(--panel);border:1px dashed var(--line);border-radius:16px;padding:36px 20px;text-align:center}
+.empty h2{margin:0 0 8px;font-size:22px}
+.empty p{color:var(--muted);margin:0 0 18px}
+.pager{display:flex;align-items:center;justify-content:center;gap:10px;margin:22px 0 0}
+.pager[hidden],.empty[hidden],.grid[hidden]{display:none!important}
+.pager button{min-width:96px}
+.pager .pg{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.err{color:var(--bad);text-align:center;min-height:20px;margin-top:8px}
+.live{display:inline-flex;align-items:center;gap:6px}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.live.on i{background:var(--accent);box-shadow:0 0 0 3px rgba(46,232,122,.2);animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(46,232,122,.2)}50%{box-shadow:0 0 0 6px rgba(46,232,122,.05)}}
+.quiet{font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+@media (max-width:520px){
+  .brand .tag{display:none}
+  .code{font-size:24px;letter-spacing:3px}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">
+    <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#052b14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg></span>
+    <div><b>Word Hunt <em>VS</em></b><span class="tag">World of rooms</span></div>
+  </a>
+  <div class="pills">
+    <a href="/" class="pill">Home</a>
+    <a href="/world" class="pill on">World</a>
+    <a href="/lab" target="_blank" rel="noopener" class="pill">Lab</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <h1>The <em>World</em></h1>
+    <p class="sub">A grid of concurrent matches. Zoom is join or spectate — each room is its own board and clock.</p>
+  </div>
+  <div class="toolbar">
+    <div class="filters" id="filters">
+      <button class="chip on" data-state="">All</button>
+      <button class="chip" data-state="playing">Live</button>
+      <button class="chip" data-state="countdown">Countdown</button>
+      <button class="chip" data-state="lobby">Lobby</button>
+      <button class="chip" data-state="results">Results</button>
+    </div>
+    <div class="meta"><span class="live" id="pulse"><i></i><span id="count">…</span></span></div>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" hidden>
+    <h2 id="emptyTitle">No matches yet</h2>
+    <p id="emptyCopy">Create a room to put the first card on the grid. A bot-filler worker (next milestone) will keep AI races warm so this page is never empty.</p>
+    <button class="primary" id="btnCreate">Create a room</button>
+  </div>
+  <div class="pager" id="pager" hidden>
+    <button id="btnPrev">Previous</button>
+    <span class="pg" id="pageLabel"></span>
+    <button id="btnNext">Next</button>
+  </div>
+  <div class="err" id="err"></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const LIMIT = 24;
+const params = new URLSearchParams(location.search);
+let offset = Math.max(0, parseInt(params.get('offset') || '0', 10) || 0);
+let state = params.get('state') || '';
+let timer = null;
+
+function syncUrl(){
+  const q = new URLSearchParams();
+  if(state) q.set('state', state);
+  if(offset) q.set('offset', String(offset));
+  const qs = q.toString();
+  history.replaceState({}, '', qs ? ('/world?' + qs) : '/world');
+}
+
+function age(s){
+  if(s < 60) return s + 's';
+  if(s < 3600) return Math.floor(s / 60) + 'm';
+  return Math.floor(s / 3600) + 'h';
+}
+
+function label(st){
+  return ({playing:'Live', countdown:'Countdown', results:'Results', lobby:'Lobby'})[st] || st;
+}
+
+function card(r){
+  const leader = r.leader ? `<div class="leader">Lead <b>${esc(r.leader.name)}</b> · ${r.leader.score.toLocaleString()}</div>`
+    : (r.top_score ? `<div class="leader">Top <b>${r.top_score.toLocaleString()}</b></div>` : '');
+  const theme = r.theme ? esc(r.theme) + (r.level && r.level.upcoming ? ' <span style="color:var(--muted);font-weight:600">(up next)</span>' : '') : '';
+  const remain = r.remaining_s != null && (r.state === 'playing' || r.state === 'countdown')
+    ? ` · <b>${r.remaining_s}s</b> left` : '';
+  const playHref = r.joinable === false ? '' : `/r/${r.code}`;
+  const play = playHref
+    ? `<a class="btn primary" href="${playHref}">Play</a>`
+    : `<a class="btn" href="/s/${r.code}">Full</a>`;
+  return `<article class="card ${r.state}">
+    <div class="card-top"><div class="code">${esc(r.code)}</div><span class="st ${r.state}">${label(r.state)}</span></div>
+    <div class="theme">${theme}</div>
+    <div class="stats">
+      <span>👥 <b>${r.humans}</b> human${r.humans===1?'':'s'}</span>
+      <span>🤖 <b>${r.ai_count}</b> AI</span>
+      <span>R${r.round || 0}</span>
+      <span>${age(r.age_s)}</span>${remain}
+      ${r.quiet ? '<span class="quiet">quiet</span>' : ''}
+    </div>
+    ${leader}
+    <div class="actions">
+      <a class="btn" href="/s/${r.code}">Spectate</a>
+      ${play}
+    </div>
+  </article>`;
+}
+
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function load(){
+  $('err').textContent = '';
+  const q = new URLSearchParams({limit: String(LIMIT), offset: String(offset)});
+  if(state) q.set('state', state);
+  try{
+    const r = await fetch('/api/world?' + q.toString());
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const rooms = j.rooms || [];
+    $('grid').innerHTML = rooms.map(card).join('');
+    const total = j.total || 0;
+    $('count').textContent = total ? (total + ' match' + (total===1?'':'es')) : 'No matches';
+    $('pulse').classList.toggle('on', total > 0);
+    const none = rooms.length === 0;
+    $('grid').hidden = none;
+    $('empty').hidden = !none;
+    if(none && state){
+      $('emptyTitle').textContent = 'Nothing in this filter';
+      $('emptyCopy').textContent = 'Other matches may still be running. Try All, or create a room.';
+      $('btnCreate').hidden = false;
+    }else if(none){
+      $('emptyTitle').textContent = 'No matches yet';
+      $('emptyCopy').textContent = 'Create a room to put the first card on the grid. A bot-filler worker (next milestone) will keep AI races warm so this page is never empty.';
+      $('btnCreate').hidden = false;
+    }
+    const pages = Math.max(1, Math.ceil(total / (j.limit || LIMIT)));
+    const page = Math.floor((j.offset || 0) / (j.limit || LIMIT)) + 1;
+    $('pager').hidden = total <= (j.limit || LIMIT);
+    $('pageLabel').textContent = 'Page ' + page + ' of ' + pages;
+    $('btnPrev').disabled = (j.offset || 0) <= 0;
+    $('btnNext').disabled = !j.has_more;
+  }catch(e){
+    $('err').textContent = 'Could not load the world.';
+  }
+}
+
+function setState(next){
+  state = next;
+  offset = 0;
+  document.querySelectorAll('#filters .chip').forEach(el => el.classList.toggle('on', el.dataset.state === state));
+  syncUrl();
+  load();
+}
+
+$('filters').onclick = e => {
+  const btn = e.target.closest('[data-state]');
+  if(btn) setState(btn.dataset.state);
+};
+$('btnPrev').onclick = () => { offset = Math.max(0, offset - LIMIT); syncUrl(); load(); };
+$('btnNext').onclick = () => { offset += LIMIT; syncUrl(); load(); };
+$('btnCreate').onclick = async () => {
+  $('err').textContent = '';
+  try{
+    const r = await fetch('/api/rooms', {method:'POST'});
+    const j = await r.json();
+    location.href = '/r/' + j.code;
+  }catch(e){
+    $('err').textContent = 'Could not create a room.';
+  }
+};
+
+document.querySelectorAll('#filters .chip').forEach(el => el.classList.toggle('on', el.dataset.state === state));
+syncUrl();
+load();
+timer = setInterval(load, 4000);
+</script>
+</body>
+</html>
