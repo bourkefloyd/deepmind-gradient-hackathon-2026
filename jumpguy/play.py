@@ -43,8 +43,8 @@ def play_live(
         # CNN needs frames; keep a slower loop.
         hz = min(hz, 20.0)
     else:
-        # Live Phaser hook + the same timed teacher that scores ~30+/45s in sim.
-        brain = HeuristicPolicy(lead_s=0.18, latency_s=0.04)
+        # Hooked tryJump is ~1 frame; CV/screenshot path needs more lead.
+        brain = HeuristicPolicy(lead_s=0.22, latency_s=0.02)
         kind = "heuristic"
 
     env = JumpGuyLive(url=url, headless=headless, player_name=player_name, grab_every=grab_every)

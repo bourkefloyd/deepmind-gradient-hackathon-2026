@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 import numpy as np
@@ -12,6 +13,7 @@ from .constants import (
     CANVAS_W,
     PLAYER_DISPLAY_W,
     PLAYER_X_FRAC,
+    TIME_TO_PEAK_S,
 )
 from .sim import GameState, Obstacle
 
@@ -19,16 +21,18 @@ from .sim import GameState, Obstacle
 class HeuristicPolicy:
     """Jump when the nearest obstacle is about `lead` seconds from overlap.
 
-    Tuned against the extracted Phaser numbers (air time ~0.78 s, overlap
-    width = player + cactus). Works from privileged state (sim / hooked live
-    game) or from a cheap color blob detector on RGB frames.
+    Lead is derived from the live Phaser numbers: gravity 1800, jump -700
+    (peak at ~0.389 s, air time ~0.778 s). Aim to put the peak near the
+    middle of the player/cactus AABB overlap. Works from privileged state
+    (sim / hooked live game) or from a cheap color blob detector on RGB frames.
     """
 
-    def __init__(self, lead_s: float = 0.20, min_lead_s: float = 0.08, latency_s: float = 0.0):
+    def __init__(self, lead_s: float = 0.22, min_lead_s: float = 0.08, latency_s: float = 0.0):
         self.lead_s = lead_s
         self.min_lead_s = min_lead_s
         self.latency_s = latency_s
         self._prev_blob_x: Optional[float] = None
+        self._prev_blob_t: Optional[float] = None
         self._est_speed = 260.0
         self._started = False
         self._did_jump = False
@@ -36,6 +40,7 @@ class HeuristicPolicy:
 
     def reset(self) -> None:
         self._prev_blob_x = None
+        self._prev_blob_t = None
         self._est_speed = 260.0
         self._started = False
         self._did_jump = False
@@ -51,33 +56,54 @@ class HeuristicPolicy:
             return int(self._act_pixels(frame))
         return int(Action.NOOP)
 
+    def _lead(self, speed: float, obs_w: float, player_w: float) -> float:
+        """Seconds before AABB overlap to queue the jump (plus control latency)."""
+        speed = max(speed, 1.0)
+        overlap_dur = (player_w + obs_w) / speed
+        # Latest safe takeoff: still airborne when the cactus exits the player.
+        max_lead = max(self.min_lead_s, AIR_TIME_S - overlap_dur - 0.05)
+        # Peak (v/g ≈ 0.389 s) over the middle of the overlap window.
+        adaptive = TIME_TO_PEAK_S - 0.45 * overlap_dur
+        preferred = self.lead_s if self.lead_s > 0 else adaptive
+        chosen = max(min(preferred, max_lead), min(adaptive, max_lead))
+        chosen = min(max(chosen, self.min_lead_s), max_lead)
+        return chosen + self.latency_s
+
     def _act_state(self, state: GameState) -> Action:
         if state.status in ("ready", "gameover"):
             self._did_jump = False
             self._prev_ttc = 1e9
             return Action.JUMP
-        player_right = state.player_x + PLAYER_DISPLAY_W / 2.0
-        incoming = [
-            o
-            for o in state.obstacles
-            if not o.passed and (o.x + o.w / 2.0) > state.player_x - PLAYER_DISPLAY_W / 2.0
-        ]
+        player_right = (
+            state.player_right
+            if state.player_right is not None
+            else state.player_x + PLAYER_DISPLAY_W / 2.0
+        )
+        player_left = (
+            state.player_left
+            if state.player_left is not None
+            else state.player_x - PLAYER_DISPLAY_W / 2.0
+        )
+        incoming = []
+        for o in state.obstacles:
+            right = o.right if o.right is not None else o.x + o.w / 2.0
+            if not o.passed and right > player_left:
+                incoming.append(o)
         if not incoming:
             self._did_jump = False
             self._prev_ttc = 1e9
             return Action.NOOP
-        o = min(incoming, key=lambda z: z.x)
-        overlap_x = o.x - o.w / 2.0
+        o = min(incoming, key=lambda z: z.left if z.left is not None else z.x)
+        overlap_x = o.left if o.left is not None else o.x - o.w / 2.0
         dist = overlap_x - player_right
         speed = max(state.speed, 1.0)
         ttc = dist / speed
-        overlap_dur = (PLAYER_DISPLAY_W + o.w) / speed
-        max_lead = max(self.min_lead_s, AIR_TIME_S - overlap_dur - 0.04)
-        lead = min(self.lead_s, max_lead) + self.latency_s
-        # Rising-edge: jump once as TTC enters the window (avoids buffer-spam).
+        lead = self._lead(speed, o.w, PLAYER_DISPLAY_W)
+        # Rising-edge: jump once as TTC enters the window (avoids 130 ms buffer-spam).
         if ttc > lead + 0.05:
             self._did_jump = False
-        should = (not self._did_jump) and (-0.05 < ttc <= lead)
+        airborne = (not state.grounded) and state.player_vy < -1.0
+        should = (not self._did_jump) and (not airborne) and (-0.05 < ttc <= lead)
         self._prev_ttc = ttc
         if should:
             self._did_jump = True
@@ -86,29 +112,39 @@ class HeuristicPolicy:
 
     def _act_pixels(self, frame: np.ndarray) -> Action:
         blobs = detect_obstacle_blobs(frame)
+        now = time.perf_counter()
         if not blobs:
             self._prev_blob_x = None
+            self._prev_blob_t = None
             # One opening tap; do not spam-jump or the buffer lands us on the next cactus.
             if not self._started:
                 self._started = True
+                self._did_jump = True
                 return Action.JUMP
             return Action.NOOP
         self._started = True
         x = min(blobs)
-        if self._prev_blob_x is not None:
+        if self._prev_blob_x is not None and self._prev_blob_t is not None:
+            dt = now - self._prev_blob_t
             dx = self._prev_blob_x - x
-            if 1.0 < dx < 80:
-                # Screenshot loop is ~15-25 Hz, not the game's 60 Hz.
-                self._est_speed = 0.6 * self._est_speed + 0.4 * (dx * 20.0)
+            if 0.02 < dt < 0.30 and 1.0 < dx < 220:
+                inst = dx / dt
+                self._est_speed = 0.55 * self._est_speed + 0.45 * inst
         self._prev_blob_x = x
+        self._prev_blob_t = now
         w = frame.shape[1]
         scale = w / CANVAS_W
-        player_right = PLAYER_X_FRAC * w + (PLAYER_DISPLAY_W * scale) / 2.0
+        player_w = PLAYER_DISPLAY_W * scale
+        player_right = PLAYER_X_FRAC * w + player_w / 2.0
         dist = x - player_right
         speed = max(self._est_speed * scale, 80.0)
         ttc = dist / speed
-        lead = self.lead_s + self.latency_s
-        if -0.05 < ttc <= lead:
+        lead = self._lead(speed / max(scale, 1e-6), PLAYER_DISPLAY_W, PLAYER_DISPLAY_W)
+        if ttc > lead + 0.08:
+            self._did_jump = False
+        should = (not self._did_jump) and (-0.08 < ttc <= lead)
+        if should:
+            self._did_jump = True
             return Action.JUMP
         return Action.NOOP
 

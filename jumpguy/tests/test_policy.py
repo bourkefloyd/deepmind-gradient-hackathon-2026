@@ -67,6 +67,19 @@ class HeuristicTests(unittest.TestCase):
         self.assertEqual(policy.act(state=close), Action.JUMP)
         self.assertEqual(policy.act(state=close), Action.NOOP)
 
+    def test_pixel_path_jumps_once(self):
+        from jumpguy.constants import CANVAS_H, CANVAS_W, OBSTACLE_COLORS
+
+        policy = HeuristicPolicy(lead_s=0.25, latency_s=0.0)
+        policy._started = True
+        frame = np.full((CANVAS_H, CANVAS_W, 3), 255, dtype=np.uint8)
+        gy = int(CANVAS_H * 0.72)
+        # Cactus just inside the ~0.17–0.22 s takeoff window at 260 px/s.
+        x0 = int(CANVAS_W * 0.22 + 36 + 32)
+        frame[gy - 30 : gy, x0 : x0 + 30] = OBSTACLE_COLORS[0]
+        self.assertEqual(policy.act(frame=frame), Action.JUMP)
+        self.assertEqual(policy.act(frame=frame), Action.NOOP)
+
 
 class BlobTests(unittest.TestCase):
     def test_detects_colored_square(self):

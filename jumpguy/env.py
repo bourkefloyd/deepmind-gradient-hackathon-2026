@@ -20,56 +20,113 @@ from .constants import CANVAS_H, CANVAS_W, GAME_URL, PLAYER_NAME
 from .observe import FrameStack, hint_text_ratio
 from .sim import GameState, Obstacle, StepResult
 
-# Phaser.GAMES.push(this) in the Game constructor. Catch the instance before
-# the ESM bundle hides it. Scene fields (player, obstacleManager, score, state,
-# tryJump, restartRun) are public class fields and survive minification.
+# This Phaser build never calls Phaser.GAMES.push (GAMES stays empty). The Game
+# constructor does `m(this.boot.bind(this))` and later `this.loop.start(this.step.bind(this))`.
+# TimeStep.callback is that bound step; rAF fires TimeStep.step.bind(TimeStep).
+# Scene key is 'game'; public fields (player, obstacleManager, tryJump) survive minify.
 _HOOK_INIT_JS = """
 (() => {
   if (window.__JUMPGUY_HOOKED) return;
   window.__JUMPGUY_HOOKED = true;
-  const push = Array.prototype.push;
-  Array.prototype.push = function (...items) {
-    for (const item of items) {
-      try {
-        if (
-          item &&
-          typeof item === 'object' &&
-          item.scene &&
-          item.loop &&
-          item.config &&
-          (item.config.parent === 'game-root' || item.config.width === 960)
-        ) {
-          window.__JUMPGUY_GAME = item;
-        }
-      } catch (e) {}
-    }
-    return push.apply(this, items);
+
+  const isGame = (o) => {
+    try {
+      if (!o || typeof o !== 'object' || !o.scene || !o.loop || !o.config) return false;
+      const c = o.config;
+      const parent = c.parent;
+      if (parent === 'game-root') return true;
+      if (typeof parent === 'string' && parent.indexOf('game-root') >= 0) return true;
+      if (parent && parent.id === 'game-root') return true;
+      if (c.width === 960 || c.height === 540) return true;
+      if (o.canvas && o.canvas.parentElement && o.canvas.parentElement.id === 'game-root') return true;
+      return false;
+    } catch (e) { return false; }
   };
+  const take = (o) => {
+    if (isGame(o)) window.__JUMPGUY_GAME = o;
+    else if (o && o.game && isGame(o.game)) window.__JUMPGUY_GAME = o.game;
+  };
+
+  const origBind = Function.prototype.bind;
+  Function.prototype.bind = function (thisArg, ...args) {
+    try { take(thisArg); } catch (e) {}
+    const bound = origBind.apply(this, [thisArg, ...args]);
+    try { bound.__jgThis = thisArg; } catch (e) {}
+    return bound;
+  };
+
+  const origRaf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = function (cb) {
+    try {
+      const t = cb && cb.__jgThis;
+      if (t) {
+        take(t);
+        if (t.callback && t.callback.__jgThis) take(t.callback.__jgThis);
+      }
+    } catch (e) {}
+    return origRaf(cb);
+  };
+
+  // Headless / background tabs: Phaser TimeStep pauses on document.hidden.
+  try {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
+  } catch (e) {}
 })();
 """
 
 _READ_STATE_JS = """
 () => {
+  const pickScene = (g) => {
+    if (!g || !g.scene) return null;
+    try {
+      const s = g.scene.getScene && g.scene.getScene('game');
+      if (s && typeof s.tryJump === 'function') return s;
+    } catch (e) {}
+    try {
+      const list = (g.scene.getScenes && g.scene.getScenes(false)) || [];
+      for (const s of list) {
+        if (s && typeof s.tryJump === 'function') return s;
+      }
+    } catch (e) {}
+    try {
+      const keys = g.scene.keys || {};
+      for (const k of Object.keys(keys)) {
+        const s = keys[k];
+        if (s && typeof s.tryJump === 'function') return s;
+      }
+    } catch (e) {}
+    return null;
+  };
   const g = window.__JUMPGUY_GAME;
   if (!g) return { hooked: false };
-  let scene = null;
-  try { scene = g.scene && g.scene.getScene ? g.scene.getScene('game') : null; } catch (e) {}
+  const scene = pickScene(g);
   if (!scene) return { hooked: true, ready: false };
   const om = scene.obstacleManager;
   const p = scene.player;
   let obstacles = [];
   try {
     const list = (om && om.getObstacles) ? om.getObstacles() : ((om && om.obstacles) || []);
-    obstacles = list.map((o) => ({
-      x: o.sprite ? o.sprite.x : 0,
-      w: o.sprite ? o.sprite.displayWidth : 30,
-      h: o.sprite ? o.sprite.displayHeight : 30,
-      passed: !!o.passed,
-    }));
+    obstacles = list.map((o) => {
+      const spr = o.sprite;
+      let b = null;
+      try { b = spr && spr.getBounds ? spr.getBounds() : null; } catch (e) {}
+      return {
+        x: spr ? spr.x : 0,
+        w: spr ? spr.displayWidth : 30,
+        h: spr ? spr.displayHeight : 30,
+        left: b ? b.left : (spr ? spr.x - (spr.displayWidth || 30) / 2 : 0),
+        right: b ? b.right : (spr ? spr.x + (spr.displayWidth || 30) / 2 : 0),
+        passed: !!o.passed,
+      };
+    });
   } catch (e) {}
   const body = p && p.body;
   let speed = 0;
   try { speed = om && om.getCurrentSpeed ? om.getCurrentSpeed() : (om ? om.speedPxPerSecond : 0); } catch (e) {}
+  let pb = null;
+  try { pb = p && p.getBounds ? p.getBounds() : null; } catch (e) {}
   return {
     hooked: true,
     ready: true,
@@ -78,6 +135,8 @@ _READ_STATE_JS = """
     player_x: p ? p.x : 211.2,
     player_y: p ? p.y : 0,
     player_vy: body ? body.velocity.y : 0,
+    player_left: pb ? pb.left : (p ? p.x - 36 : 175.2),
+    player_right: pb ? pb.right : (p ? p.x + 36 : 247.2),
     grounded: body ? !!(body.blocked.down || body.touching.down) : true,
     speed: Number(speed) || 0,
     obstacles,
@@ -90,7 +149,14 @@ _TRY_JUMP_JS = """
 () => {
   const g = window.__JUMPGUY_GAME;
   if (!g) return null;
-  const scene = g.scene && g.scene.getScene ? g.scene.getScene('game') : null;
+  let scene = null;
+  try { scene = g.scene && g.scene.getScene ? g.scene.getScene('game') : null; } catch (e) {}
+  if (!scene || typeof scene.tryJump !== 'function') {
+    try {
+      const list = (g.scene && g.scene.getScenes && g.scene.getScenes(false)) || [];
+      scene = list.find((s) => s && typeof s.tryJump === 'function') || null;
+    } catch (e) {}
+  }
   if (scene && typeof scene.tryJump === 'function') {
     scene.tryJump();
     return 'tryJump';
@@ -103,7 +169,8 @@ _RESTART_JS = """
 () => {
   const g = window.__JUMPGUY_GAME;
   if (!g) return false;
-  const scene = g.scene && g.scene.getScene ? g.scene.getScene('game') : null;
+  let scene = null;
+  try { scene = g.scene && g.scene.getScene ? g.scene.getScene('game') : null; } catch (e) {}
   if (scene && typeof scene.restartRun === 'function' && !scene.awaitingScoreSubmit) {
     scene.restartRun();
     return true;
@@ -181,6 +248,9 @@ class JumpGuyLive:
                 "--disable-dev-shm-usage",
                 "--no-first-run",
                 "--autoplay-policy=no-user-gesture-required",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
                 f"--window-size={self.width},{self.height + 80}",
             ],
         }
@@ -468,7 +538,14 @@ class JumpGuyLive:
         p = self._phaser or {}
         if p.get("hooked") and p.get("ready"):
             obs = [
-                Obstacle(x=float(o.get("x", 0)), w=float(o.get("w", 30)), h=float(o.get("h", 30)), passed=bool(o.get("passed")))
+                Obstacle(
+                    x=float(o.get("x", 0)),
+                    w=float(o.get("w", 30)),
+                    h=float(o.get("h", 30)),
+                    passed=bool(o.get("passed")),
+                    left=float(o["left"]) if o.get("left") is not None else None,
+                    right=float(o["right"]) if o.get("right") is not None else None,
+                )
                 for o in (p.get("obstacles") or [])
             ]
             status = str(p.get("status") or self.info.status)
@@ -491,6 +568,8 @@ class JumpGuyLive:
                 t=0.0,
                 ticks=self._step_i,
                 hooked=True,
+                player_left=float(p["player_left"]) if p.get("player_left") is not None else None,
+                player_right=float(p["player_right"]) if p.get("player_right") is not None else None,
             )
         return GameState(
             score=self.info.score,

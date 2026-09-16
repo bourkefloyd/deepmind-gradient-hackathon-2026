@@ -54,6 +54,8 @@ class Obstacle:
     h: float
     passed: bool = False
     color: tuple[int, int, int] = OBSTACLE_COLORS[0]
+    left: Optional[float] = None
+    right: Optional[float] = None
 
 
 @dataclass
@@ -69,6 +71,8 @@ class GameState:
     t: float
     ticks: int
     hooked: bool = False
+    player_left: Optional[float] = None
+    player_right: Optional[float] = None
 
 
 @dataclass

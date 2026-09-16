@@ -1,37 +1,72 @@
 #!/usr/bin/env bash
-# Train Jump Guy on a Lambda Labs (or RunPod) GPU box that you already have SSH to.
+# Train Jump Guy on a Lambda Labs (or RunPod) GPU box you already have SSH to.
 #
-# ── 1. Start a Lambda instance (API; do this on a machine that has LAMBDA_API_KEY) ──
-# The launch body needs an SSH key *name already registered on the Lambda account*
-# (GET https://cloud.lambda.ai/api/v1/ssh-keys). That name is not the private-key
-# file path. Do not invent a name; list keys first.
+# ═══════════════════════════════════════════════════════════════════════════
+# Lambda Labs: how we start instances (API; SSH key *name*, not a file)
+# ═══════════════════════════════════════════════════════════════════════════
 #
-#   export LAMBDA_API_KEY=...          # existing account secret
-#   # GET /ssh-keys  → pick one "name"
-#   # POST /instances  { region_name, instance_type_name, ssh_key_names: ["<that-name>"] }
-#   # See jumpguy/README.md § "Lambda Labs"
+# Instances are launched with POST https://cloud.lambda.ai/api/v1/instances
+# The body requires ssh_key_names: an array with exactly ONE name that is
+# already registered on the Lambda account. That name is NOT a private-key
+# path and must not be invented.
 #
-# ── 2. On the box (Ubuntu, Lambda Stack torch+CUDA) ──
+#   export LAMBDA_API_KEY=...          # existing secret; never commit
+#   # 1) List registered keys — use the "name" field:
+#   curl -sS https://cloud.lambda.ai/api/v1/ssh-keys \
+#     -H "Authorization: Bearer $LAMBDA_API_KEY" \
+#     -H "Accept: application/json" \
+#     -H "User-Agent: cursor-cloud-agent/lambda-cloud"
+#   # 2) Launch (example). ssh_key_names must match a name from step 1:
+#   curl -sS -X POST https://cloud.lambda.ai/api/v1/instances \
+#     -H "Authorization: Bearer $LAMBDA_API_KEY" \
+#     -H "Accept: application/json" \
+#     -H "Content-Type: application/json" \
+#     -H "User-Agent: cursor-cloud-agent/lambda-cloud" \
+#     -d '{"region_name":"us-west-2",
+#          "instance_type_name":"gpu_1x_a100_sxm4",
+#          "ssh_key_names":["<name-from-GET-ssh-keys>"]}'
+#   # 3) SSH as ubuntu@<ip> with the *private* key that matches that name.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# On the box: exact clone + train (copy-paste)
+# ═══════════════════════════════════════════════════════════════════════════
+#
 #   git clone https://github.com/bourkefloyd/deepmind-gradient-hackathon-2026.git
 #   cd deepmind-gradient-hackathon-2026
 #   git checkout cursor/jumpguy-realtime-agent-7cc0
 #   python3 -m pip install -r jumpguy/requirements.txt
+#   python3 -m jumpguy device cuda
+#   python3 -m jumpguy collect --episodes 80 --out jumpguy/data/heuristic.npz
+#   python3 -m jumpguy train --bc jumpguy/data/heuristic.npz --steps 2000 --out jumpguy/runs/bc1
+#   python3 -m jumpguy train --ppo --init jumpguy/runs/bc1/model.pt --steps 30000 --out jumpguy/runs/ppo1
+#   python3 -m jumpguy eval --policy cnn --ckpt jumpguy/runs/bc1/model.pt --episodes 15
 #
-# ── 3. From your laptop, ship + train (or just run the python commands on the box) ──
-#   export JUMPGUY_SSH_KEY=$HOME/.ssh/<private-key-that-matches-the-registered-name>
+# Expected artifacts on the box:
+#   jumpguy/data/heuristic.npz          teacher rollouts
+#   jumpguy/runs/bc1/model.pt           BC weights
+#   jumpguy/runs/bc1/train.json         BC metrics
+#   jumpguy/runs/ppo1/model.pt          PPO weights
+#   jumpguy/runs/ppo1/train.json        PPO metrics
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# From a laptop that already has SSH (this script)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#   export JUMPGUY_SSH_KEY=$HOME/.ssh/<private-key-matching-the-registered-name>
 #   export JUMPGUY_REMOTE=ubuntu@<instance-ip>
-#   jumpguy/remote_train.sh up   "$JUMPGUY_REMOTE"
-#   jumpguy/remote_train.sh log  "$JUMPGUY_REMOTE"
-#   jumpguy/remote_train.sh pull "$JUMPGUY_REMOTE"
+#   export JUMPGUY_DEVICE=cuda          # optional; default cuda
+#   # optional: WANDB_API_KEY  EPISODES=80  BC_STEPS=2000  PPO_STEPS=30000
+#   # optional: REPO_URL  REPO_BRANCH  (defaults below)
 #
-# Expected artifacts after pull:
-#   jumpguy/runs/remote/bc1/model.pt + train.json
-#   jumpguy/runs/remote/ppo1/model.pt + train.json
+#   jumpguy/remote_train.sh clone "$JUMPGUY_REMOTE"   # git clone + checkout
+#   jumpguy/remote_train.sh up    "$JUMPGUY_REMOTE"   # ship tree + collect/BC + PPO
+#   jumpguy/remote_train.sh log   "$JUMPGUY_REMOTE"
+#   jumpguy/remote_train.sh pull  "$JUMPGUY_REMOTE"   # → jumpguy/runs/remote/{bc1,ppo1}/
+#   jumpguy/remote_train.sh smoke "$JUMPGUY_REMOTE"
 #
-# Optional env: JUMPGUY_DEVICE=cuda  WANDB_API_KEY=  EPISODES=80  BC_STEPS=2000  PPO_STEPS=30000
-# RUNPOD_POD_ID is document-only; SSH to the pod the same way.
+# RUNPOD_POD_ID is document-only; SSH to the pod the same way after you have a host.
 set -euo pipefail
-cmd=${1:?up|log|pull|smoke}
+cmd=${1:?clone|up|log|pull|smoke}
 host=${2:-${JUMPGUY_REMOTE:?pass user@host or set JUMPGUY_REMOTE}}
 KEY=${JUMPGUY_SSH_KEY:-$HOME/.ssh/id_ed25519}
 SSH=(ssh -i "$KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=15)
@@ -39,17 +74,41 @@ SCP=(scp -i "$KEY" -o StrictHostKeyChecking=no)
 EPISODES=${EPISODES:-80}
 BC_STEPS=${BC_STEPS:-2000}
 PPO_STEPS=${PPO_STEPS:-30000}
+REPO_URL=${REPO_URL:-https://github.com/bourkefloyd/deepmind-gradient-hackathon-2026.git}
 REPO_BRANCH=${REPO_BRANCH:-cursor/jumpguy-realtime-agent-7cc0}
+REMOTE_DIR=${JUMPGUY_REMOTE_DIR:-~/jumpguy_ws}
 
 case "$cmd" in
+  clone)
+    "${SSH[@]}" "$host" bash -s <<EOF
+set -euo pipefail
+mkdir -p ${REMOTE_DIR}
+cd ${REMOTE_DIR}
+if [ -d deepmind-gradient-hackathon-2026/.git ]; then
+  cd deepmind-gradient-hackathon-2026
+  git fetch origin ${REPO_BRANCH}
+  git checkout ${REPO_BRANCH}
+  git pull --ff-only origin ${REPO_BRANCH} || true
+else
+  git clone --branch ${REPO_BRANCH} --single-branch ${REPO_URL} deepmind-gradient-hackathon-2026
+  cd deepmind-gradient-hackathon-2026
+fi
+git rev-parse --abbrev-ref HEAD
+git log -1 --oneline
+python3 -m pip install -q -r jumpguy/requirements.txt
+python3 -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
+EOF
+    ;;
   up)
     tar czf /tmp/jumpguy_ship.tgz jumpguy/*.py jumpguy/requirements.txt jumpguy/README.md jumpguy/remote_train.sh
-    "${SSH[@]}" "$host" 'mkdir -p ~/jumpguy_ws/jumpguy ~/jumpguy_ws/runs'
-    "${SCP[@]}" /tmp/jumpguy_ship.tgz "$host":~/jumpguy_ws/
+    "${SSH[@]}" "$host" "mkdir -p ${REMOTE_DIR}/jumpguy ${REMOTE_DIR}/runs"
+    "${SCP[@]}" /tmp/jumpguy_ship.tgz "$host":${REMOTE_DIR}/
     "${SSH[@]}" "$host" bash -s <<EOF
 set -e
-cd ~/jumpguy_ws && tar xzf jumpguy_ship.tgz
+cd ${REMOTE_DIR} && tar xzf jumpguy_ship.tgz
 echo "branch-hint ${REPO_BRANCH}  (this tarball is the jumpguy/ tree, not a full clone)"
+echo "prefer: jumpguy/remote_train.sh clone  — then run the python commands in the clone"
 python3 -m pip install -q -r jumpguy/requirements.txt
 python3 -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
@@ -63,19 +122,21 @@ tail -20 runs/bc1/train.json || true
 EOF
     ;;
   log)
-    "${SSH[@]}" "$host" 'cd ~/jumpguy_ws && echo "== bc1"; cat runs/bc1/train.json 2>/dev/null | tail -20; echo "== ppo1"; tail -30 runs/ppo1.log 2>/dev/null; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader || true'
+    "${SSH[@]}" "$host" "cd ${REMOTE_DIR} && echo '== bc1' && (cat runs/bc1/train.json 2>/dev/null || cat deepmind-gradient-hackathon-2026/jumpguy/runs/bc1/train.json 2>/dev/null) | tail -20; echo '== ppo1'; tail -30 runs/ppo1.log 2>/dev/null; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader || true"
     ;;
   pull)
     mkdir -p jumpguy/runs/remote
-    "${SCP[@]}" -r "$host":~/jumpguy_ws/runs/bc1 jumpguy/runs/remote/ || echo "missing bc1"
-    "${SCP[@]}" -r "$host":~/jumpguy_ws/runs/ppo1 jumpguy/runs/remote/ || echo "missing ppo1"
+    "${SCP[@]}" -r "$host":${REMOTE_DIR}/runs/bc1 jumpguy/runs/remote/ || echo "missing ${REMOTE_DIR}/runs/bc1"
+    "${SCP[@]}" -r "$host":${REMOTE_DIR}/runs/ppo1 jumpguy/runs/remote/ || echo "missing ${REMOTE_DIR}/runs/ppo1"
+    "${SCP[@]}" -r "$host":${REMOTE_DIR}/deepmind-gradient-hackathon-2026/jumpguy/runs/bc1 jumpguy/runs/remote/ 2>/dev/null || true
+    "${SCP[@]}" -r "$host":${REMOTE_DIR}/deepmind-gradient-hackathon-2026/jumpguy/runs/ppo1 jumpguy/runs/remote/ 2>/dev/null || true
     ls -la jumpguy/runs/remote/*/model.pt 2>/dev/null || true
     ;;
   smoke)
-    "${SSH[@]}" "$host" 'cd ~/jumpguy_ws && python3 -m jumpguy device cuda && python3 -m jumpguy collect --episodes 4 --out /tmp/jg.npz && python3 -m jumpguy train --bc /tmp/jg.npz --steps 40 --out /tmp/jg_bc'
+    "${SSH[@]}" "$host" "cd ${REMOTE_DIR} && python3 -m jumpguy device cuda && python3 -m jumpguy collect --episodes 4 --out /tmp/jg.npz && python3 -m jumpguy train --bc /tmp/jg.npz --steps 40 --out /tmp/jg_bc"
     ;;
   *)
-    echo "unknown cmd $cmd" >&2
+    echo "unknown cmd $cmd (clone|up|log|pull|smoke)" >&2
     exit 2
     ;;
 esac

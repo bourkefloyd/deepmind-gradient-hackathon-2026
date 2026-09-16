@@ -36,13 +36,13 @@ jumpguy/
   observe.py        84×84 grayscale stack
   policy.py         timed-jump heuristic (state or CV) + CNN wrapper
   model.py          JumpNet (small CNN, policy + value)
-  env.py            Playwright live env (canvas grab + /api/runs hooks)
+  env.py            Playwright live env (Phaser bind/rAF hook + tryJump + grabs)
   collect.py        teacher rollouts from the sim
   train.py          BC on rollouts, PPO on the sim
   eval.py           sim evaluation
   play.py           live realtime runner
   device.py         cuda / mps / cpu
-  remote_train.sh   Lambda / RunPod SSH: up | log | pull | smoke
+  remote_train.sh   Lambda / RunPod SSH: clone | up | log | pull | smoke
   tests/            unittest suite (no live site required)
 ```
 
@@ -71,24 +71,33 @@ python -m jumpguy eval --policy cnn --ckpt jumpguy/runs/bc_smoke/model.pt --epis
 
 ### Lambda Labs (GPU)
 
-Instances are started through the [Lambda Cloud API](https://cloud.lambda.ai/api/v1), which requires an **SSH key name already registered on the account** — not a new key file and not a made-up name.
+We start instances through the [Lambda Cloud API](https://cloud.lambda.ai/api/v1). Launch **requires an SSH key *name* that is already registered on the account** (`GET /ssh-keys` → use the `name` field). That name is not a private-key file path and must not be invented. The API rejects a launch with an unknown name.
 
 ```bash
 export LAMBDA_API_KEY=...          # existing secret; never commit
-# List registered keys (use the "name" field):
-#   GET https://cloud.lambda.ai/api/v1/ssh-keys
-#     Authorization: Bearer $LAMBDA_API_KEY
-#     User-Agent: cursor-cloud-agent/lambda-cloud
-# Launch (exactly one name):
-#   POST /instances
-#   { "region_name": "us-west-2",
-#     "instance_type_name": "gpu_1x_a100_sxm4",
-#     "ssh_key_names": ["<name-from-GET-ssh-keys>"] }
+
+# 1) List registered keys — copy one "name":
+curl -sS https://cloud.lambda.ai/api/v1/ssh-keys \
+  -H "Authorization: Bearer $LAMBDA_API_KEY" \
+  -H "Accept: application/json" \
+  -H "User-Agent: cursor-cloud-agent/lambda-cloud"
+
+# 2) Launch (exactly one registered name):
+curl -sS -X POST https://cloud.lambda.ai/api/v1/instances \
+  -H "Authorization: Bearer $LAMBDA_API_KEY" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: cursor-cloud-agent/lambda-cloud" \
+  -d '{"region_name":"us-west-2",
+       "instance_type_name":"gpu_1x_a100_sxm4",
+       "ssh_key_names":["<name-from-GET-ssh-keys>"]}'
+
+# 3) SSH as ubuntu@<ip> with the private key that matches that registered name.
 ```
 
-Then SSH as `ubuntu@<ip>` with the **private key that matches that registered name**.
+Default Python `urllib` User-Agent is blocked by Cloudflare 1010; send a non-default `User-Agent` as above.
 
-On the box:
+#### On the box (exact clone + branch + train)
 
 ```bash
 git clone https://github.com/bourkefloyd/deepmind-gradient-hackathon-2026.git
@@ -97,26 +106,43 @@ git checkout cursor/jumpguy-realtime-agent-7cc0
 python3 -m pip install -r jumpguy/requirements.txt
 python3 -m jumpguy device cuda
 python3 -m jumpguy collect --episodes 80 --out jumpguy/data/heuristic.npz
-python3 -m jumpguy train --bc jumpguy/data/heuristic.npz --steps 2000 --out runs/bc1
-python3 -m jumpguy train --ppo --init runs/bc1/model.pt --steps 30000 --out runs/ppo1
-python3 -m jumpguy eval --policy cnn --ckpt runs/bc1/model.pt --episodes 15
+python3 -m jumpguy train --bc jumpguy/data/heuristic.npz --steps 2000 --out jumpguy/runs/bc1
+python3 -m jumpguy train --ppo --init jumpguy/runs/bc1/model.pt --steps 30000 --out jumpguy/runs/ppo1
+python3 -m jumpguy eval --policy cnn --ckpt jumpguy/runs/bc1/model.pt --episodes 15
 ```
 
-Expected artifacts: `runs/bc1/model.pt`, `runs/bc1/train.json`, `runs/ppo1/model.pt`, `runs/ppo1/train.json`.
+| Artifact | What |
+|---|---|
+| `jumpguy/data/heuristic.npz` | teacher rollouts |
+| `jumpguy/runs/bc1/model.pt` | BC weights |
+| `jumpguy/runs/bc1/train.json` | BC steps / val acc / device |
+| `jumpguy/runs/ppo1/model.pt` | PPO weights |
+| `jumpguy/runs/ppo1/train.json` | PPO env steps / mean+max score |
 
-From a laptop that already has SSH:
+#### From a laptop that already has SSH
 
 ```bash
 export JUMPGUY_SSH_KEY=$HOME/.ssh/<private-key-matching-the-registered-name>
 export JUMPGUY_REMOTE=ubuntu@<instance-ip>
 export JUMPGUY_DEVICE=cuda
-# optional: WANDB_API_KEY  EPISODES=80  BC_STEPS=2000  PPO_STEPS=30000
-jumpguy/remote_train.sh up   "$JUMPGUY_REMOTE"
-jumpguy/remote_train.sh log  "$JUMPGUY_REMOTE"
-jumpguy/remote_train.sh pull "$JUMPGUY_REMOTE"   # → jumpguy/runs/remote/{bc1,ppo1}/
+# optional:
+#   WANDB_API_KEY
+#   EPISODES=80
+#   BC_STEPS=2000
+#   PPO_STEPS=30000
+#   REPO_URL=https://github.com/bourkefloyd/deepmind-gradient-hackathon-2026.git
+#   REPO_BRANCH=cursor/jumpguy-realtime-agent-7cc0
+#   JUMPGUY_REMOTE_DIR=~/jumpguy_ws
+
+jumpguy/remote_train.sh clone "$JUMPGUY_REMOTE"   # git clone + checkout the branch
+jumpguy/remote_train.sh up    "$JUMPGUY_REMOTE"   # or ship the jumpguy/ tree + train
+jumpguy/remote_train.sh log   "$JUMPGUY_REMOTE"
+jumpguy/remote_train.sh pull  "$JUMPGUY_REMOTE"   # → jumpguy/runs/remote/{bc1,ppo1}/
 ```
 
 `RUNPOD_POD_ID` is document-only; same Python commands work on a RunPod box after you SSH in. `python -m jumpguy device` prints the resolved torch device.
+
+Live play does **not** need a GPU: the privileged-state heuristic calls `scene.tryJump()` on the game origin.
 
 ## How to eval against the live game
 
@@ -152,7 +178,7 @@ Leaderboard (human) scores sit around 1400. Getting there is a training problem,
 - **Do not fake `/api/runs/*/pass`**. Seq tokens are server-checked; faking a score is both against the community rules and rejected.
 - **Leaderboard name** is the signed-in Viva+ username. There is no free-text “player name” box for guests. We still write `Grok Bot Son` into any input we find.
 - **CORS / iframe**: play the game origin as top-level. Embedding from localhost is blocked by CSP.
-- **Canvas / WebGL**: Phaser `AUTO` picks WebGL. `canvas.toDataURL()` is **black** (no `preserveDrawingBuffer`). Screenshots use the composited layer when a frame is needed. The live heuristic prefers a **Phaser Game hook** (`Array.prototype.push` catch of `Phaser.GAMES.push(this)`) and calls `scene.tryJump()` — the same function Space uses — so the control loop is not screenshot-bound.
+- **Canvas / WebGL**: Phaser `AUTO` picks WebGL. `canvas.toDataURL()` is **black** (no `preserveDrawingBuffer`). Screenshots use the composited layer when a frame is needed. This build never calls `Phaser.GAMES.push`. The live heuristic captures `Game` via `Function.prototype.bind` / `requestAnimationFrame` (constructor does `this.boot.bind(this)` and `this.loop.start(this.step.bind(this))`), then calls `scene.tryJump()` — the same function Space uses, no 70 ms pointer debounce — so the control loop is not screenshot-bound.
 - **Fallback**: if the hook misses, we tap the canvas + send Space and run the CV blob teacher.
 - **Audio**: jump/score/lose oggs; ignored by the agent.
 - **Offline mode**: if `POST /api/runs` fails the game still plays locally and skips submit.
