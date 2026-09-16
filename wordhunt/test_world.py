@@ -114,7 +114,7 @@ class WorldIndex(unittest.TestCase):
                 self.assertFalse(body["filler"]["enabled"])
                 page = client.get("/world")
                 self.assertEqual(page.status_code, 200)
-                self.assertIn("The World", page.text)
+                self.assertIn("The <em>World</em>", page.text)
                 self.assertIn("/api/world", page.text)
 
 
