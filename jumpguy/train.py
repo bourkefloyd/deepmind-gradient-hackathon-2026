@@ -17,16 +17,74 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from .actions import Action
 from .device import torch_device
 from .model import JumpNet, JumpNetConfig, load_checkpoint, save_checkpoint
 from .sim import JumpGuySim
 
 
-def _load_bc(path: Path) -> tuple[np.ndarray, np.ndarray]:
+def expand_jump_labels(actions: np.ndarray, dones: np.ndarray, radius: int = 4) -> np.ndarray:
+    """Mark a few frames *before* each teacher jump as JUMP (takeoff window)."""
+    out = actions.copy()
+    if radius <= 0:
+        return out
+    n = len(out)
+    for i in range(n):
+        if int(actions[i]) != 1:
+            continue
+        lo = i
+        for k in range(1, radius + 1):
+            j = i - k
+            if j < 0 or bool(dones[j]):
+                break
+            lo = j
+        out[lo : i + 1] = 1
+    return out
+
+
+def _load_bc(path: Path, jump_window: int = 4) -> tuple[np.ndarray, np.ndarray]:
     data = np.load(path)
     frames = data["frames"].astype(np.float32)
     actions = data["actions"].astype(np.int64)
+    dones = data["dones"] if "dones" in data.files else np.zeros(len(actions), dtype=np.bool_)
+    if jump_window > 0:
+        actions = expand_jump_labels(actions, np.asarray(dones), radius=jump_window)
     return frames, actions
+
+
+def _sim_score(model, device, episodes: int = 3, max_ticks: int = 900, seed: int = 0) -> float:
+    """Cheap rollout used as the BC checkpoint metric (val loss is noop-heavy)."""
+    model.eval()
+    scores: list[int] = []
+    for ep in range(episodes):
+        sim = JumpGuySim(seed=seed + ep, render=True, max_ticks=max_ticks)
+        step = sim.reset(seed=seed + ep)
+        cool = 0
+        kicked = False
+        while True:
+            if not kicked:
+                a = int(Action.JUMP)
+                kicked = True
+                cool = 28
+            elif cool > 0:
+                a = int(Action.NOOP)
+                cool -= 1
+            else:
+                x = torch.as_tensor(step.stack, device=device).unsqueeze(0)
+                with torch.no_grad():
+                    logits, _ = model(x)
+                    p = float(torch.softmax(logits, dim=-1)[0, 1])
+                if p >= 0.55:
+                    a = int(Action.JUMP)
+                    cool = 28
+                else:
+                    a = int(Action.NOOP)
+            step = sim.step(a)
+            if step.done:
+                scores.append(int(step.state.score))
+                break
+    model.train()
+    return float(np.mean(scores)) if scores else 0.0
 
 
 def train_bc(
@@ -38,9 +96,11 @@ def train_bc(
     device_name: str = "auto",
     width: int = 32,
     val_every: int = 100,
+    jump_window: int = 4,
+    score_every: int = 200,
 ) -> dict[str, Any]:
     device = torch_device(device_name)
-    frames, actions = _load_bc(data_path)
+    frames, actions = _load_bc(data_path, jump_window=jump_window)
     n = len(actions)
     if n < 8:
         raise SystemExit(f"not enough transitions in {data_path}: {n}")
@@ -60,7 +120,8 @@ def train_bc(
     w = torch.as_tensor(weights, device=device)
     t0 = time.perf_counter()
     history: list[dict[str, float]] = []
-    best = 1e9
+    best_loss = 1e9
+    best_score = -1.0
     for step in range(1, steps + 1):
         model.train()
         # Jumps are ~1-2% of ticks. Mild upsample (≈1:7) avoids NOOP collapse
@@ -92,13 +153,29 @@ def train_bc(
             rec = {"step": step, "train_loss": float(loss.detach()), "val_loss": vloss, "val_acc": acc}
             history.append(rec)
             print(f"bc step {step}/{steps} loss={loss:.4f} val_loss={vloss:.4f} acc={acc:.3f}", flush=True)
-            if vloss < best:
-                best = vloss
+            rec["sim_score"] = -1.0
+            if score_every > 0 and (step % score_every == 0 or step == steps):
+                rec["sim_score"] = _sim_score(model, device)
+                print(f"bc sim_score={rec['sim_score']:.2f}", flush=True)
+            if rec["sim_score"] > best_score or (rec["sim_score"] < 0 and vloss < best_loss):
+                if rec["sim_score"] > best_score:
+                    best_score = rec["sim_score"]
+                if vloss < best_loss:
+                    best_loss = vloss
                 save_checkpoint(
                     out / "model.pt",
                     model,
-                    extra={"kind": "bc", "step": step, "val_acc": acc, "val_loss": vloss, "n": n},
+                    extra={
+                        "kind": "bc",
+                        "step": step,
+                        "val_acc": acc,
+                        "val_loss": vloss,
+                        "sim_score": rec["sim_score"],
+                        "n": n,
+                    },
                 )
+            elif vloss < best_loss:
+                best_loss = vloss
     meta = {
         "kind": "bc",
         "steps": steps,
@@ -109,7 +186,9 @@ def train_bc(
         "params": model.n_params(),
         "seconds": round(time.perf_counter() - t0, 2),
         "history": history,
-        "best_val_loss": best,
+        "best_val_loss": best_loss,
+        "best_sim_score": best_score,
+        "jump_window": jump_window,
         "data": str(data_path),
     }
     (out / "train.json").write_text(json.dumps(meta, indent=2))
@@ -264,6 +343,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", default="auto")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--no-render", action="store_true")
+    p.add_argument("--jump-window", type=int, default=4, help="BC: extra frames before each teacher jump")
+    p.add_argument("--entropy", type=float, default=0.02, help="PPO entropy coefficient")
     args = p.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -276,6 +357,7 @@ def main(argv: list[str] | None = None) -> int:
             batch_size=args.batch_size,
             device_name=args.device,
             width=args.width,
+            jump_window=args.jump_window,
         )
         print(json.dumps({k: v for k, v in meta.items() if k != "history"}, indent=2))
         return 0
@@ -289,6 +371,7 @@ def main(argv: list[str] | None = None) -> int:
             init=Path(args.init) if args.init else None,
             seed=args.seed,
             render=not args.no_render,
+            entropy_coef=args.entropy,
         )
         print(json.dumps({k: v for k, v in meta.items() if k != "history"}, indent=2))
         return 0

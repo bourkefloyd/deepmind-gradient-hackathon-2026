@@ -197,34 +197,56 @@ class RandomPolicy:
 
 
 class CnnPolicy:
-    """Greedy CNN. Loads a jumpguy checkpoint (`model.pt` + optional `train.json`)."""
+    """Vision policy with a takeoff threshold + cooldown (not raw argmax).
 
-    def __init__(self, path: str, device: str = "auto", temperature: float = 0.0):
+    Argmax on a 1–2% jump class over-fires and lands on the cactus. We jump
+    once when p(jump) clears `jump_p_min`, then wait `cooldown_ticks` so the
+    130 ms Phaser buffer cannot chain into the next cactus.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        device: str = "auto",
+        temperature: float = 0.0,
+        jump_p_min: float = 0.55,
+        cooldown_ticks: int = 28,
+    ):
         import torch
 
         from .device import torch_device
-        from .model import JumpNet, load_checkpoint
+        from .model import load_checkpoint
 
         self.device = torch_device(device)
         self.model, self.meta = load_checkpoint(path, self.device)
         self.model.eval()
         self.temperature = temperature
+        self.jump_p_min = jump_p_min
+        self.cooldown_ticks = cooldown_ticks
+        self._cool = 0
         self._torch = torch
 
     def reset(self) -> None:
-        pass
+        self._cool = 0
 
     def act(self, stack: np.ndarray, deterministic: Optional[bool] = None) -> int:
         torch = self._torch
+        if self._cool > 0:
+            self._cool -= 1
+            return int(Action.NOOP)
         x = torch.as_tensor(stack, device=self.device, dtype=torch.float32)
         if x.ndim == 3:
             x = x.unsqueeze(0)
         with torch.no_grad():
             logits, _ = self.model(x)
-            if deterministic or self.temperature <= 0:
-                return int(logits.argmax(dim=-1).item())
-            probs = torch.softmax(logits / self.temperature, dim=-1)
-            return int(torch.multinomial(probs, 1).item())
+            if self.temperature > 0 and not deterministic:
+                probs = torch.softmax(logits / self.temperature, dim=-1)
+                return int(torch.multinomial(probs, 1).item())
+            p_jump = float(torch.softmax(logits, dim=-1)[0, 1])
+        if p_jump >= self.jump_p_min:
+            self._cool = self.cooldown_ticks
+            return int(Action.JUMP)
+        return int(Action.NOOP)
 
 
 def load_policy(name: str, ckpt: Optional[str] = None, device: str = "auto"):

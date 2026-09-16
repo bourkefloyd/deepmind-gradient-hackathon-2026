@@ -2,7 +2,7 @@
 
 A local control loop that plays [Jump Guy](https://game.jumpguy.net) at game speed: **frame in → discrete jump/noop out**. Training happens on a physics clone of the live Phaser scene; evaluation can target the live site.
 
-This package is isolated from Word Hunt (`wordhunt/`, `nano/`, `gemma_seat/`). It reuses the same ideas (tiny policy, checkpoint JSON, Lambda/SSH train script) without touching those paths.
+This package is isolated from Word Hunt (`wordhunt/`, `nano/`, `gemma_seat/`). It reuses the same ideas (tiny policy, checkpoint JSON, SSH train script) without touching those paths. Remote GPU follows the Action Fleet pattern: rent a CUDA box on the **RunPod console**, then SSH/rsync and train. There is no in-repo RunPod config.
 
 Player name used on any score / achievement UI: **`Grok Bot Son`**.
 
@@ -42,7 +42,7 @@ jumpguy/
   eval.py           sim evaluation
   play.py           live realtime runner
   device.py         cuda / mps / cpu
-  remote_train.sh   Lambda / RunPod SSH: clone | up | log | pull | smoke
+  remote_train.sh   RunPod-first SSH: clone | up | log | pull | smoke | env
   tests/            unittest suite (no live site required)
 ```
 
@@ -69,35 +69,34 @@ python -m jumpguy eval --policy heuristic --episodes 15
 python -m jumpguy eval --policy cnn --ckpt jumpguy/runs/bc_smoke/model.pt --episodes 10
 ```
 
-### Lambda Labs (GPU)
+### RunPod (primary GPU path — Action Fleet ops)
 
-We start instances through the [Lambda Cloud API](https://cloud.lambda.ai/api/v1). Launch **requires an SSH key *name* that is already registered on the account** (`GET /ssh-keys` → use the `name` field). That name is not a private-key file path and must not be invented. The API rejects a launch with an unknown name.
+actionfleet has **no in-repo RunPod config**. GPU work is: rent a CUDA pod on the [RunPod console](https://www.runpod.io/console/pods), then SSH/rsync and train. Same pattern as ActionFleet `make train-swm SWM_DEVICE=cuda`: once the box exists, run collect → BC → PPO on it.
+
+| Env | Required | What |
+|---|---|---|
+| `RUNPOD_API_KEY` | console/API only | Existing secret. **Never commit.** This script does not launch pods. |
+| `RUNPOD_POD_ID` | after you rent | Pod id from the console. Document-only; SSH uses `JUMPGUY_REMOTE`. |
+| `JUMPGUY_SSH_KEY` | yes | Path to the **private** key you added on the pod (e.g. `$HOME/.ssh/id_ed25519`) |
+| `JUMPGUY_REMOTE` | yes | RunPod is often **`root@<pod-ip>`** |
+| `JUMPGUY_SSH_PORT` | if not 22 | Exposed SSH port from the pod Connect panel |
+| `JUMPGUY_DEVICE` | recommended | `cuda` |
+| `WANDB_API_KEY` | optional | W&B |
 
 ```bash
-export LAMBDA_API_KEY=...          # existing secret; never commit
+# 1) Rent a CUDA / PyTorch pod on the RunPod console. Add your public SSH key.
+# 2) Copy pod id, IP, and port from Connect.
 
-# 1) List registered keys — copy one "name":
-curl -sS https://cloud.lambda.ai/api/v1/ssh-keys \
-  -H "Authorization: Bearer $LAMBDA_API_KEY" \
-  -H "Accept: application/json" \
-  -H "User-Agent: cursor-cloud-agent/lambda-cloud"
-
-# 2) Launch (exactly one registered name):
-curl -sS -X POST https://cloud.lambda.ai/api/v1/instances \
-  -H "Authorization: Bearer $LAMBDA_API_KEY" \
-  -H "Accept: application/json" \
-  -H "Content-Type: application/json" \
-  -H "User-Agent: cursor-cloud-agent/lambda-cloud" \
-  -d '{"region_name":"us-west-2",
-       "instance_type_name":"gpu_1x_a100_sxm4",
-       "ssh_key_names":["<name-from-GET-ssh-keys>"]}'
-
-# 3) SSH as ubuntu@<ip> with the private key that matches that registered name.
+export RUNPOD_API_KEY=...                 # existing secret; never commit
+export RUNPOD_POD_ID=<pod-id>
+export JUMPGUY_SSH_KEY=$HOME/.ssh/id_ed25519
+export JUMPGUY_REMOTE=root@<pod-ip>      # RunPod often uses root
+export JUMPGUY_SSH_PORT=22                # or the console's exposed port
+export JUMPGUY_DEVICE=cuda
+# optional: WANDB_API_KEY  EPISODES=80  BC_STEPS=2000  PPO_STEPS=30000
 ```
 
-Default Python `urllib` User-Agent is blocked by Cloudflare 1010; send a non-default `User-Agent` as above.
-
-#### On the box (exact clone + branch + train)
+On the box (or via `jumpguy/remote_train.sh clone`):
 
 ```bash
 git clone https://github.com/bourkefloyd/deepmind-gradient-hackathon-2026.git
@@ -105,6 +104,7 @@ cd deepmind-gradient-hackathon-2026
 git checkout cursor/jumpguy-realtime-agent-7cc0
 python3 -m pip install -r jumpguy/requirements.txt
 python3 -m jumpguy device cuda
+# ActionFleet parallel: make train-swm SWM_DEVICE=cuda
 python3 -m jumpguy collect --episodes 80 --out jumpguy/data/heuristic.npz
 python3 -m jumpguy train --bc jumpguy/data/heuristic.npz --steps 2000 --out jumpguy/runs/bc1
 python3 -m jumpguy train --ppo --init jumpguy/runs/bc1/model.pt --steps 30000 --out jumpguy/runs/ppo1
@@ -115,34 +115,25 @@ python3 -m jumpguy eval --policy cnn --ckpt jumpguy/runs/bc1/model.pt --episodes
 |---|---|
 | `jumpguy/data/heuristic.npz` | teacher rollouts |
 | `jumpguy/runs/bc1/model.pt` | BC weights |
-| `jumpguy/runs/bc1/train.json` | BC steps / val acc / device |
+| `jumpguy/runs/bc1/train.json` | BC steps / val acc / sim score |
 | `jumpguy/runs/ppo1/model.pt` | PPO weights |
 | `jumpguy/runs/ppo1/train.json` | PPO env steps / mean+max score |
 
-#### From a laptop that already has SSH
+From a laptop that already has SSH:
 
 ```bash
-export JUMPGUY_SSH_KEY=$HOME/.ssh/<private-key-matching-the-registered-name>
-export JUMPGUY_REMOTE=ubuntu@<instance-ip>
-export JUMPGUY_DEVICE=cuda
-# optional:
-#   WANDB_API_KEY
-#   EPISODES=80
-#   BC_STEPS=2000
-#   PPO_STEPS=30000
-#   REPO_URL=https://github.com/bourkefloyd/deepmind-gradient-hackathon-2026.git
-#   REPO_BRANCH=cursor/jumpguy-realtime-agent-7cc0
-#   JUMPGUY_REMOTE_DIR=~/jumpguy_ws
-
+jumpguy/remote_train.sh env   "$JUMPGUY_REMOTE"   # prints env; never prints secret values
 jumpguy/remote_train.sh clone "$JUMPGUY_REMOTE"   # git clone + checkout the branch
-jumpguy/remote_train.sh up    "$JUMPGUY_REMOTE"   # or ship the jumpguy/ tree + train
+jumpguy/remote_train.sh up    "$JUMPGUY_REMOTE"   # rsync jumpguy/ + collect/BC + PPO
 jumpguy/remote_train.sh log   "$JUMPGUY_REMOTE"
 jumpguy/remote_train.sh pull  "$JUMPGUY_REMOTE"   # → jumpguy/runs/remote/{bc1,ppo1}/
 ```
 
-`RUNPOD_POD_ID` is document-only; same Python commands work on a RunPod box after you SSH in. `python -m jumpguy device` prints the resolved torch device.
+`python -m jumpguy device` prints the resolved torch device. Live play does **not** need a GPU: the privileged-state heuristic calls `scene.tryJump()` on the game origin.
 
-Live play does **not** need a GPU: the privileged-state heuristic calls `scene.tryJump()` on the game origin.
+### Lambda Labs (secondary)
+
+Same SSH train flow if you already have a Lambda box (`JUMPGUY_REMOTE=ubuntu@<ip>`). Launch still needs a **registered SSH key name** on the account (`GET /ssh-keys` → `ssh_key_names` on `POST /instances`). Prefer RunPod for this package.
 
 ## How to eval against the live game
 
