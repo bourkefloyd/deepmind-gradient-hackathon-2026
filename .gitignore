@@ -6,3 +6,6 @@ data/*.npz
 __pycache__/
 *.pyc
 .DS_Store
+jumpguy/runs/
+jumpguy/data/*.npz
+jumpguy/data/*.json
