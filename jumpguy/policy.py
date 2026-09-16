@@ -15,7 +15,7 @@ from .constants import (
     PLAYER_X_FRAC,
     TIME_TO_PEAK_S,
 )
-from .sim import GameState, Obstacle
+from .sim import GameState
 
 
 class HeuristicPolicy:
@@ -102,8 +102,9 @@ class HeuristicPolicy:
         # Rising-edge: jump once as TTC enters the window (avoids 130 ms buffer-spam).
         if ttc > lead + 0.05:
             self._did_jump = False
-        airborne = (not state.grounded) and state.player_vy < -1.0
-        should = (not self._did_jump) and (not airborne) and (-0.05 < ttc <= lead)
+        # Queue while airborne: Phaser jump buffer (130 ms) + coyote (100 ms)
+        # fire on landing. Skipping here misses tight follow-up cacti.
+        should = (not self._did_jump) and (-0.05 < ttc <= lead)
         self._prev_ttc = ttc
         if should:
             self._did_jump = True

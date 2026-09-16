@@ -63,10 +63,11 @@ def train_bc(
     best = 1e9
     for step in range(1, steps + 1):
         model.train()
-        # Jumps are ~1-2% of ticks; balanced batches keep the policy from collapsing to NOOP.
-        half = max(1, batch_size // 2)
+        # Jumps are ~1-2% of ticks. Mild upsample (≈1:7) avoids NOOP collapse
+        # without teaching a 50% jump prior that lands on the next cactus.
+        n_jump = max(1, batch_size // 8)
         if len(jump_idx) and len(noop_idx):
-            b_j = rng.choice(jump_idx, size=min(half, len(jump_idx)), replace=len(jump_idx) < half)
+            b_j = rng.choice(jump_idx, size=min(n_jump, len(jump_idx)), replace=len(jump_idx) < n_jump)
             b_n = rng.choice(noop_idx, size=min(batch_size - len(b_j), len(noop_idx)), replace=False)
             b = np.concatenate([b_j, b_n])
             rng.shuffle(b)
@@ -216,7 +217,7 @@ def train_ppo(
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 opt.step()
-                last_loss = float(loss)
+                last_loss = float(loss.detach())
         rec = {
             "env_steps": env_steps,
             "loss": last_loss,

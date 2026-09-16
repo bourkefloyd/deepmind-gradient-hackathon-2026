@@ -163,15 +163,15 @@ Drive **`https://game.jumpguy.net`**, not the Viva+ marketing page. The wrapper 
 
 ## Success metrics
 
-| Metric | Where | Measured (this PR) |
-|---|---|---|
-| Sim heuristic | `eval --policy heuristic` | **mean 33.7 / 45 s** (hits the tick cap; ~21k actions/s) |
-| CNN after balanced BC | `eval --policy cnn` | **mean 12.7, max 22** on 6 sim episodes (weak, scoring) |
-| Live loop latency | Playwright canvas screenshot | **p50 ~86 ms, p95 ~106 ms** (~12 Hz including grab) |
-| Live score | `POST /api/runs/*/pass` | **server score 4** on a headless heuristic run |
-| CNN BC val acc | balanced batches | **~0.96** (without balancing the net collapses to NOOP) |
+| Metric | Where | First pass | This follow-up |
+|---|---|---|---|
+| Sim heuristic | `eval --policy heuristic` | mean 33.7 / 45 s cap | **mean 33.9, max 35 / 45 s cap** (12 eps, all hit the tick cap) |
+| CNN BC | `eval --policy cnn` | mean 12.7, max 22 | 16-ep collect + 1000-step BC, val acc **0.905**; greedy CNN still dies on cactus 1 (over-early jumps). Live play does **not** use the CNN. |
+| CPU PPO | 4000 env steps from BC | — | mean **0.27**, max 1 (too short; collapsed) |
+| Live loop latency | hooked `tryJump` + state read | p50 86 ms (screenshot loop) | **p50 6.8 ms**, p95 14.7 ms, ~60 Hz |
+| Live score | `game.jumpguy.net` | server **4** | **69 and 70** on two 90 s hooked runs (still `running` at the time cap); 50 s snapshot **server 39**, run `e2f54a30-3bf1-4914-94b2-2cfad56601ad` |
 
-Leaderboard (human) scores sit around 1400. Getting there is a training problem, not a missing env.
+Leaderboard (human) scores sit around 1400. The hooked teacher now matches sim quality on the live origin (≈1 cactus / 1.2 s → ~70 in 90 s). Long sessions are the remaining training problem.
 
 ## Blockers / live-site notes
 
