@@ -55,6 +55,7 @@ a.btn:hover{filter:brightness(1.08)}
 .empty h2{margin:0 0 8px;font-size:22px}
 .empty p{color:var(--muted);margin:0 0 18px}
 .pager{display:flex;align-items:center;justify-content:center;gap:10px;margin:22px 0 0}
+.pager[hidden],.empty[hidden],.grid[hidden]{display:none!important}
 .pager button{min-width:96px}
 .pager .pg{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
 .err{color:var(--bad);text-align:center;min-height:20px;margin-top:8px}
@@ -99,8 +100,8 @@ a.btn:hover{filter:brightness(1.08)}
   </div>
   <div id="grid" class="grid"></div>
   <div id="empty" class="empty" hidden>
-    <h2>No matches yet</h2>
-    <p>Create a room to put the first card on the grid. A bot-filler worker (next milestone) will keep AI races warm so this page is never empty.</p>
+    <h2 id="emptyTitle">No matches yet</h2>
+    <p id="emptyCopy">Create a room to put the first card on the grid. A bot-filler worker (next milestone) will keep AI races warm so this page is never empty.</p>
     <button class="primary" id="btnCreate">Create a room</button>
   </div>
   <div class="pager" id="pager" hidden>
@@ -182,8 +183,18 @@ async function load(){
     const total = j.total || 0;
     $('count').textContent = total ? (total + ' match' + (total===1?'':'es')) : 'No matches';
     $('pulse').classList.toggle('on', total > 0);
-    $('empty').hidden = rooms.length > 0 || total > 0;
-    $('grid').hidden = rooms.length === 0;
+    const none = rooms.length === 0;
+    $('grid').hidden = none;
+    $('empty').hidden = !none;
+    if(none && state){
+      $('emptyTitle').textContent = 'Nothing in this filter';
+      $('emptyCopy').textContent = 'Other matches may still be running. Try All, or create a room.';
+      $('btnCreate').hidden = false;
+    }else if(none){
+      $('emptyTitle').textContent = 'No matches yet';
+      $('emptyCopy').textContent = 'Create a room to put the first card on the grid. A bot-filler worker (next milestone) will keep AI races warm so this page is never empty.';
+      $('btnCreate').hidden = false;
+    }
     const pages = Math.max(1, Math.ceil(total / (j.limit || LIMIT)));
     const page = Math.floor((j.offset || 0) / (j.limit || LIMIT)) + 1;
     $('pager').hidden = total <= (j.limit || LIMIT);
