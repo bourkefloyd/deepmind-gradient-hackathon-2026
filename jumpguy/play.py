@@ -52,8 +52,7 @@ def play_live(
                 brain.reset()
             step = env.reset()
             # Opening jump starts the Phaser run (state `ready` -> `running`).
-            if kind != "cnn":
-                step = env.step(Action.JUMP)
+            step = env.step(Action.JUMP)
             t_end = time.perf_counter() + max_seconds
             n = 0
             while time.perf_counter() < t_end:

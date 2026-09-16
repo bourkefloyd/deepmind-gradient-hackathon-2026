@@ -79,11 +79,16 @@ class SimPhysicsTests(unittest.TestCase):
 
 class RenderTests(unittest.TestCase):
     def test_frame_shape(self):
-        sim = JumpGuySim(seed=0, render=True)
+        sim = JumpGuySim(seed=0, render="small")
         step = sim.reset()
-        self.assertEqual(step.frame.shape[2], 3)
-        self.assertEqual(step.stack.shape[0], 4)
-        self.assertEqual(step.stack.shape[1], 84)
+        self.assertEqual(step.frame.shape, (84, 84, 3))
+        self.assertEqual(step.stack.shape, (4, 84, 84))
+
+    def test_full_frame_shape(self):
+        sim = JumpGuySim(seed=0, render="full")
+        step = sim.reset()
+        self.assertEqual(step.frame.shape[0], 540)
+        self.assertEqual(step.frame.shape[1], 960)
 
 
 if __name__ == "__main__":

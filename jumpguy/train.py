@@ -50,18 +50,32 @@ def train_bc(
     n_val = max(8, n // 10)
     val_idx = idx[:n_val]
     train_idx = idx[n_val:]
+    jump_idx = train_idx[actions[train_idx] == 1]
+    noop_idx = train_idx[actions[train_idx] == 0]
+    counts = np.bincount(actions, minlength=2).astype(np.float32)
+    weights = 1.0 / np.maximum(counts, 1.0)
+    weights = weights / weights.mean()
     model = JumpNet(JumpNetConfig(width=width)).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+    w = torch.as_tensor(weights, device=device)
     t0 = time.perf_counter()
     history: list[dict[str, float]] = []
     best = 1e9
     for step in range(1, steps + 1):
         model.train()
-        b = rng.choice(train_idx, size=min(batch_size, len(train_idx)), replace=False)
+        # Jumps are ~1-2% of ticks; balanced batches keep the policy from collapsing to NOOP.
+        half = max(1, batch_size // 2)
+        if len(jump_idx) and len(noop_idx):
+            b_j = rng.choice(jump_idx, size=min(half, len(jump_idx)), replace=len(jump_idx) < half)
+            b_n = rng.choice(noop_idx, size=min(batch_size - len(b_j), len(noop_idx)), replace=False)
+            b = np.concatenate([b_j, b_n])
+            rng.shuffle(b)
+        else:
+            b = rng.choice(train_idx, size=min(batch_size, len(train_idx)), replace=False)
         x = torch.as_tensor(frames[b], device=device)
         y = torch.as_tensor(actions[b], device=device)
         logits, _ = model(x)
-        loss = F.cross_entropy(logits, y)
+        loss = F.cross_entropy(logits, y, weight=w)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -74,7 +88,7 @@ def train_bc(
                 vlogits, _ = model(vx)
                 vloss = float(F.cross_entropy(vlogits, vy))
                 acc = float((vlogits.argmax(-1) == vy).float().mean())
-            rec = {"step": step, "train_loss": float(loss), "val_loss": vloss, "val_acc": acc}
+            rec = {"step": step, "train_loss": float(loss.detach()), "val_loss": vloss, "val_acc": acc}
             history.append(rec)
             print(f"bc step {step}/{steps} loss={loss:.4f} val_loss={vloss:.4f} acc={acc:.3f}", flush=True)
             if vloss < best:
@@ -88,6 +102,8 @@ def train_bc(
         "kind": "bc",
         "steps": steps,
         "n": n,
+        "jump_frac": float((actions == 1).mean()),
+        "class_weight": weights.tolist(),
         "device": str(device),
         "params": model.n_params(),
         "seconds": round(time.perf_counter() - t0, 2),

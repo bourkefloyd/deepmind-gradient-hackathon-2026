@@ -18,6 +18,7 @@ from .constants import (
     CANVAS_W,
     COYOTE_MS,
     DT,
+    FRAME_SIZE,
     GRAVITY_Y,
     GROUND_Y_FRAC,
     JUMP_BUFFER_MS,
@@ -89,20 +90,26 @@ class JumpGuySim:
     def __init__(
         self,
         seed: int = 0,
-        render: bool = True,
-        max_ticks: int = int(3 * 60 * TICK_HZ),
+        render: bool | str = "small",
+        max_ticks: int = int(45 * TICK_HZ),
         stack: bool = True,
         auto_restart: bool = False,
     ):
         self.rng = np.random.default_rng(seed)
-        self.render_enabled = render
+        # False = no pixels; "small"/True = 84x84 for CNN; "full" = 960x540 debug.
+        if render is True:
+            render = "small"
+        self.render_mode = render if render else False
         self.max_ticks = max_ticks
         self.use_stack = stack
         self.auto_restart = auto_restart
         self.stacker = FrameStack() if stack else None
         self.ground_y = float(int(CANVAS_H * GROUND_Y_FRAC))
         self.player_x = CANVAS_W * PLAYER_X_FRAC
-        self._frame = np.zeros((CANVAS_H, CANVAS_W, 3), dtype=np.uint8)
+        if self.render_mode == "full":
+            self._frame = np.zeros((CANVAS_H, CANVAS_W, 3), dtype=np.uint8)
+        else:
+            self._frame = np.zeros((FRAME_SIZE, FRAME_SIZE, 3), dtype=np.uint8)
         self.reset()
 
     def reset(self, seed: Optional[int] = None) -> StepResult:
@@ -260,51 +267,45 @@ class JumpGuySim:
         return StepResult(frame, stack, self.state(), reward, done, info)
 
     def _render(self) -> np.ndarray:
-        if not self.render_enabled:
+        if not self.render_mode:
+            self._frame.fill(0)
             return self._frame
+        if self.render_mode == "full":
+            sx, sy, w, h = 1.0, 1.0, CANVAS_W, CANVAS_H
+        else:
+            w = h = FRAME_SIZE
+            sx, sy = w / CANVAS_W, h / CANVAS_H
         img = self._frame
         img.fill(255)
-        gy = int(self.ground_y)
-        img[gy : gy + 2, :] = (58, 58, 58)
-        # hash marks
-        e = gy + 10
-        t = int(self.ground_pattern_offset) % 22
-        for n in range(-22, CANVAS_W + 22, 22):
-            r = n - t
-            if 0 <= r < CANVAS_W and 0 <= e < CANVAS_H:
-                img[e, r : min(CANVAS_W, r + 4)] = (89, 89, 89)
-        # obstacles
+        gy = int(self.ground_y * sy)
+        if 0 <= gy < h:
+            img[gy : min(h, gy + max(1, int(2 * sy))), :] = (58, 58, 58)
         for o in self.obstacles:
-            x0 = int(round(o.x - o.w / 2.0))
-            y0 = int(round(self.ground_y - o.h))
-            x1 = int(round(o.x + o.w / 2.0))
-            y1 = int(round(self.ground_y))
-            x0 = max(0, x0)
-            y0 = max(0, y0)
-            x1 = min(CANVAS_W, x1)
-            y1 = min(CANVAS_H, y1)
+            x0 = int(round((o.x - o.w / 2.0) * sx))
+            y0 = int(round((self.ground_y - o.h) * sy))
+            x1 = int(round((o.x + o.w / 2.0) * sx))
+            y1 = int(round(self.ground_y * sy))
+            x0, y0 = max(0, x0), max(0, y0)
+            x1, y1 = min(w, x1), min(h, y1)
             if x1 > x0 and y1 > y0:
                 img[y0:y1, x0:x1] = o.color
-        # player (blocky stand-in matching the generated palette)
         px, py, pw, ph = self._player_bounds()
-        x0, y0 = int(round(px)), int(round(py))
-        x1, y1 = int(round(px + pw)), int(round(py + ph))
+        x0, y0 = int(round(px * sx)), int(round(py * sy))
+        x1, y1 = int(round((px + pw) * sx)), int(round((py + ph) * sy))
         x0, y0 = max(0, x0), max(0, y0)
-        x1, y1 = min(CANVAS_W, x1), min(CANVAS_H, y1)
+        x1, y1 = min(w, x1), min(h, y1)
         if x1 > x0 and y1 > y0:
-            mid = y0 + (y1 - y0) // 3
-            waist = y0 + 2 * (y1 - y0) // 3
+            mid = y0 + max(1, (y1 - y0) // 3)
+            waist = y0 + max(2, 2 * (y1 - y0) // 3)
             img[y0:mid, x0:x1] = PLAYER_HAT
             img[mid:waist, x0:x1] = PLAYER_SHIRT
             img[waist:y1, x0:x1] = PLAYER_PANTS
-            # face sliver
             fx0 = x0 + (x1 - x0) // 4
             fx1 = x1 - (x1 - x0) // 4
-            if fx1 > fx0:
-                img[y0 + 4 : mid, fx0:fx1] = PLAYER_SKIN
-            img[max(y0, y1 - 4) : y1, x0:x1] = PLAYER_SHOES
-        self._frame = img
-        return img.copy()
+            if fx1 > fx0 and mid > y0 + 1:
+                img[y0 + 1 : mid, fx0:fx1] = PLAYER_SKIN
+            img[max(y0, y1 - 2) : y1, x0:x1] = PLAYER_SHOES
+        return img
 
 
 def theoretical_jump() -> dict[str, float]:

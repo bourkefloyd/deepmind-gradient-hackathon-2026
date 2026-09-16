@@ -18,7 +18,7 @@ def collect_sim(
     episodes: int,
     out: Path,
     seed: int = 0,
-    max_ticks: int = 20_000,
+    max_ticks: int = 2_700,
     render: bool = True,
 ) -> dict:
     policy = HeuristicPolicy()
@@ -65,6 +65,7 @@ def collect_sim(
         "out": str(out),
         "frame_stack": FRAME_STACK,
         "frame_size": FRAME_SIZE,
+        "jump_frac": float(np.mean(np.asarray(actions) == 1)) if actions else 0.0,
     }
     out.with_suffix(".json").write_text(json.dumps(meta, indent=2))
     return meta
@@ -75,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--episodes", type=int, default=40)
     p.add_argument("--out", default="jumpguy/data/heuristic.npz")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--max-ticks", type=int, default=12_000)
+    p.add_argument("--max-ticks", type=int, default=2700)
     p.add_argument("--no-render", action="store_true", help="state-only (cannot train a CNN)")
     args = p.parse_args(argv)
     meta = collect_sim(

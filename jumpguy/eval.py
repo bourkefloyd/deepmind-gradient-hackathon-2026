@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .actions import Action
 from .policy import CnnPolicy, HeuristicPolicy, RandomPolicy
 from .sim import JumpGuySim
 
@@ -19,7 +20,7 @@ def eval_sim(
     seed: int = 0,
     ckpt: str = "",
     device: str = "auto",
-    max_ticks: int = 12_000,
+    max_ticks: int = 2_700,
     render: bool = True,
 ) -> dict:
     if policy_name in ("heuristic", "teacher", "cv"):
@@ -46,9 +47,13 @@ def eval_sim(
             policy.reset()
         step = sim.reset(seed=seed + ep)
         n = 0
+        kicked = False
         while True:
             if kind == "cnn":
                 a = policy.act(step.stack)  # type: ignore[attr-defined]
+                if not kicked:
+                    a = int(Action.JUMP)
+                    kicked = True
             else:
                 a = policy.act(state=step.state, frame=step.frame)  # type: ignore[attr-defined]
             step = sim.step(a)
@@ -81,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--episodes", type=int, default=20)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="auto")
-    p.add_argument("--max-ticks", type=int, default=12_000)
+    p.add_argument("--max-ticks", type=int, default=2700)
     p.add_argument("--out", default="")
     args = p.parse_args(argv)
     result = eval_sim(

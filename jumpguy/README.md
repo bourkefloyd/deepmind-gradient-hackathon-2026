@@ -115,13 +115,13 @@ Drive **`https://game.jumpguy.net`**, not the Viva+ marketing page. The wrapper 
 
 ## Success metrics
 
-| Metric | Where | Target for this PR |
+| Metric | Where | Measured (this PR) |
 |---|---|---|
-| Sim heuristic mean score | `eval --policy heuristic` | **> 1** (weak but scoring), often much higher |
-| Actions / sec (sim) | eval JSON `actions_per_sec` | thousands on CPU (sim is not realtime-bound) |
-| Live loop latency | play JSON `latency_ms` | grab+act **< 50 ms** p50, control at 20–30 Hz |
-| Live score | play JSON `server_score` | **> 0** on a clean run (first working loop) |
-| CNN BC val acc | `train.json` | teacher-action accuracy, not live ELO |
+| Sim heuristic | `eval --policy heuristic` | **mean 33.7 / 45 s** (hits the tick cap; ~21k actions/s) |
+| CNN after balanced BC | `eval --policy cnn` | **mean 12.7, max 22** on 6 sim episodes (weak, scoring) |
+| Live loop latency | Playwright canvas screenshot | **p50 ~86 ms, p95 ~106 ms** (~12 Hz including grab) |
+| Live score | `POST /api/runs/*/pass` | **server score 4** on a headless heuristic run |
+| CNN BC val acc | balanced batches | **~0.96** (without balancing the net collapses to NOOP) |
 
 Leaderboard (human) scores sit around 1400. Getting there is a training problem, not a missing env.
 
@@ -130,7 +130,7 @@ Leaderboard (human) scores sit around 1400. Getting there is a training problem,
 - **Do not fake `/api/runs/*/pass`**. Seq tokens are server-checked; faking a score is both against the community rules and rejected.
 - **Leaderboard name** is the signed-in Viva+ username. There is no free-text “player name” box for guests. We still write `Grok Bot Son` into any input we find.
 - **CORS / iframe**: play the game origin as top-level. Embedding from localhost is blocked by CSP.
-- **Canvas / WebGL**: frames come from `canvas.toDataURL('image/jpeg')`. Headless Chrome is enough; if Cloudflare challenges you, replay `--headed` once to refresh the cookie.
+- **Canvas / WebGL**: Phaser `AUTO` picks WebGL. `canvas.toDataURL()` is **black** (no `preserveDrawingBuffer`). The live env screenshots the composited canvas instead. Keyboard-only Space is flaky until focus; we tap the canvas (the game’s real pointer path) and also send Space.
 - **Audio**: jump/score/lose oggs; ignored by the agent.
 - **Offline mode**: if `POST /api/runs` fails the game still plays locally and skips submit.
 

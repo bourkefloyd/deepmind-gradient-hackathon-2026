@@ -7,10 +7,9 @@ server-authoritative /api/runs* traffic.
 
 from __future__ import annotations
 
-import base64
 import io
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -103,10 +102,8 @@ class JumpGuyLive:
         self._page.on("response", self._on_response)
         self._page.goto(self.url, wait_until="domcontentloaded")
         self._page.wait_for_selector("#game-root canvas", timeout=self.navigation_timeout_ms)
-        # First click focuses the canvas so Space is delivered to Phaser.
         self._canvas = self._page.locator("#game-root canvas")
-        self._canvas.click(timeout=self.navigation_timeout_ms)
-        time.sleep(0.15)
+        self._wait_until_ready()
         self.info = LiveInfo()
         self._started_running = False
 
@@ -161,8 +158,33 @@ class JumpGuyLive:
         except Exception:
             return
 
+    def _wait_until_ready(self, timeout_s: float = 12.0) -> None:
+        """Boot scene paints LOADING...; wait until the PLAY hint is on the canvas."""
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            try:
+                frame = self._grab_frame()
+            except Exception:
+                time.sleep(0.15)
+                continue
+            # Boot scene is white + "LOADING...". Game scene has SCORE in the top-left
+            # (dark Courier) and a player-colored blob on the left ground.
+            if float(frame.mean()) > 220 and _has_player_pixels(frame):
+                time.sleep(0.25)
+                return
+            time.sleep(0.12)
+        # Still proceed: some themes / font rasterization may miss the threshold.
+
     def _press_jump(self) -> None:
-        assert self._page is not None
+        """Tap the canvas (pointerdown) and poke Space. Keyboard-only is flaky
+        until Phaser has focus; the live game treats tap/click as jump."""
+        assert self._page is not None and self._canvas is not None
+        box = self._canvas.bounding_box()
+        if box:
+            # Click the playfield, not the HUD / overlay.
+            self._page.mouse.click(box["x"] + box["width"] * 0.50, box["y"] + box["height"] * 0.62)
+        else:
+            self._canvas.click()
         self._page.keyboard.down("Space")
         self._page.keyboard.up("Space")
 
@@ -171,22 +193,12 @@ class JumpGuyLive:
         self._page.keyboard.press("r")
 
     def _grab_frame(self) -> np.ndarray:
-        assert self._page is not None
+        assert self._page is not None and self._canvas is not None
         t0 = time.perf_counter()
-        # Canvas toDataURL is one round-trip and avoids a full-page screenshot.
-        data_url = self._page.evaluate(
-            """() => {
-              const c = document.querySelector('#game-root canvas');
-              if (!c) return null;
-              return c.toDataURL('image/jpeg', 0.55);
-            }"""
-        )
-        if not data_url:
-            png = self._canvas.screenshot(type="jpeg", quality=55)
-            frame = _jpeg_to_rgb(png)
-        else:
-            raw = data_url.split(",", 1)[1]
-            frame = _jpeg_to_rgb(base64.b64decode(raw))
+        # Phaser AUTO uses WebGL. canvas.toDataURL() is black unless
+        # preserveDrawingBuffer is set (it is not). Screenshot the composited layer.
+        raw = self._canvas.screenshot(type="jpeg", quality=60)
+        frame = _jpeg_to_rgb(raw)
         self.info.grab_ms = (time.perf_counter() - t0) * 1000.0
         return frame
 
@@ -273,15 +285,12 @@ class JumpGuyLive:
 
     def _infer_status(self, frame: np.ndarray) -> None:
         hint = hint_text_ratio(frame)
-        if not self._started_running:
-            if hint < 0.004:
-                self._started_running = True
-                if self.info.status == "ready":
-                    self.info.status = "running"
-        else:
-            # Hint band fills back in with GAME OVER text.
-            if hint > 0.012 and self.info.status == "running":
-                self.info.status = "gameover"
+        bright = float(frame.mean()) > 180
+        if self.info.status == "ready" and bright and hint < 0.0004 and self._last_hint >= 0.0004:
+            self.info.status = "running"
+            self._started_running = True
+        elif self.info.status == "running" and bright and hint > 0.008:
+            self.info.status = "gameover"
         self._last_hint = hint
 
     def reset(self) -> StepResult:
@@ -326,8 +335,6 @@ class JumpGuyLive:
             ta = time.perf_counter()
             self._press_jump()
             self.info.action_ms = (time.perf_counter() - ta) * 1000.0
-            if self.info.status == "ready":
-                self.info.status = "running"
         frame = self._grab_frame()
         self._poll_dom()
         self._infer_status(frame)
@@ -348,6 +355,18 @@ class JumpGuyLive:
             "overlay": self.info.overlay_open,
         }
         return StepResult(frame, stack, self._state(), reward, done, info)
+
+
+def _has_player_pixels(frame: np.ndarray) -> bool:
+    """True when the generated player palette is visible (game scene, not boot)."""
+    h, w = frame.shape[:2]
+    band = frame[int(h * 0.45) : int(h * 0.75), int(w * 0.10) : int(w * 0.35)]
+    if band.size == 0:
+        return False
+    r, g, b = band[:, :, 0], band[:, :, 1], band[:, :, 2]
+    hat = (np.abs(r.astype(np.int16) - 88) < 30) & (np.abs(g.astype(np.int16) - 106) < 40)
+    pants = (b.astype(np.int16) > 80) & (r.astype(np.int16) < 80)
+    return bool(hat.mean() > 0.002 or pants.mean() > 0.002)
 
 
 def _jpeg_to_rgb(data: bytes) -> np.ndarray:

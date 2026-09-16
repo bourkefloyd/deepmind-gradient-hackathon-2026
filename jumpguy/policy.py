@@ -24,15 +24,18 @@ class HeuristicPolicy:
     game) or from a cheap color blob detector on RGB frames.
     """
 
-    def __init__(self, lead_s: float = 0.18, min_lead_s: float = 0.08):
+    def __init__(self, lead_s: float = 0.22, min_lead_s: float = 0.08, latency_s: float = 0.08):
         self.lead_s = lead_s
         self.min_lead_s = min_lead_s
+        self.latency_s = latency_s
         self._prev_blob_x: Optional[float] = None
         self._est_speed = 260.0
+        self._started = False
 
     def reset(self) -> None:
         self._prev_blob_x = None
         self._est_speed = 260.0
+        self._started = False
 
     def act(self, state: Optional[GameState] = None, frame: Optional[np.ndarray] = None) -> int:
         if state is not None:
@@ -67,25 +70,28 @@ class HeuristicPolicy:
     def _act_pixels(self, frame: np.ndarray) -> Action:
         blobs = detect_obstacle_blobs(frame)
         if not blobs:
-            # Nothing incoming: tap once to start / restart.
             self._prev_blob_x = None
-            return Action.JUMP
+            # One opening tap; do not spam-jump or the buffer lands us on the next cactus.
+            if not self._started:
+                self._started = True
+                return Action.JUMP
+            return Action.NOOP
+        self._started = True
         x = min(blobs)
         if self._prev_blob_x is not None:
             dx = self._prev_blob_x - x
-            if 0.5 < dx < 40:
-                # per-frame motion; assume ~60 Hz if we cannot measure dt.
-                self._est_speed = 0.7 * self._est_speed + 0.3 * (dx * 60.0)
+            if 1.0 < dx < 80:
+                # Screenshot loop is ~15-25 Hz, not the game's 60 Hz.
+                self._est_speed = 0.6 * self._est_speed + 0.4 * (dx * 20.0)
         self._prev_blob_x = x
         w = frame.shape[1]
-        player_right = PLAYER_X_FRAC * w + (PLAYER_DISPLAY_W / CANVAS_W) * w / 1.0
-        # PLAYER_DISPLAY_W is in game pixels; scale to this frame.
         scale = w / CANVAS_W
         player_right = PLAYER_X_FRAC * w + (PLAYER_DISPLAY_W * scale) / 2.0
         dist = x - player_right
-        speed = max(self._est_speed * (w / CANVAS_W), 1.0)
+        speed = max(self._est_speed * scale, 80.0)
         ttc = dist / speed
-        if -0.05 < ttc <= self.lead_s:
+        lead = self.lead_s + self.latency_s
+        if -0.05 < ttc <= lead:
             return Action.JUMP
         return Action.NOOP
 
