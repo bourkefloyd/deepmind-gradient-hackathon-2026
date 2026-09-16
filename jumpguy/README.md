@@ -69,41 +69,63 @@ python -m jumpguy eval --policy heuristic --episodes 15
 python -m jumpguy eval --policy cnn --ckpt jumpguy/runs/bc_smoke/model.pt --episodes 10
 ```
 
-### Remote GPU (Lambda Cloud or RunPod)
+### Lambda Labs (GPU)
 
-Same pattern as `nano/lambda_train.sh`. **Do not invent keys.** Use Bourke’s existing Lambda SSH key / RunPod pod.
+Instances are started through the [Lambda Cloud API](https://cloud.lambda.ai/api/v1), which requires an **SSH key name already registered on the account** — not a new key file and not a made-up name.
 
 ```bash
-export JUMPGUY_SSH_KEY=$HOME/.ssh/lambda_nano    # or your RunPod key
-export JUMPGUY_REMOTE=ubuntu@<gpu-ip>            # Lambda: ubuntu@<ip>
-# optional
-export WANDB_API_KEY=                            # unused unless you add wandb
-export JUMPGUY_DEVICE=cuda
-export RUNPOD_POD_ID=                            # document-only; SSH to the pod
-
-jumpguy/remote_train.sh up   "$JUMPGUY_REMOTE"   # ship + collect + BC + PPO
-jumpguy/remote_train.sh log  "$JUMPGUY_REMOTE"
-jumpguy/remote_train.sh pull "$JUMPGUY_REMOTE"   # -> jumpguy/runs/remote/
+export LAMBDA_API_KEY=...          # existing secret; never commit
+# List registered keys (use the "name" field):
+#   GET https://cloud.lambda.ai/api/v1/ssh-keys
+#     Authorization: Bearer $LAMBDA_API_KEY
+#     User-Agent: cursor-cloud-agent/lambda-cloud
+# Launch (exactly one name):
+#   POST /instances
+#   { "region_name": "us-west-2",
+#     "instance_type_name": "gpu_1x_a100_sxm4",
+#     "ssh_key_names": ["<name-from-GET-ssh-keys>"] }
 ```
 
-On the box the script runs:
+Then SSH as `ubuntu@<ip>` with the **private key that matches that registered name**.
 
-1. `python -m jumpguy collect` (heuristic teacher on the sim, rendered frames)
-2. `python -m jumpguy train --bc` (imitation)
-3. `python -m jumpguy train --ppo --init …` (on-policy refinement)
+On the box:
 
-A100 / 4090: keep `--steps` in the 20k–100k env-step range for PPO. The CNN is ~0.4 M params at `width=32`; a BC pass of a few thousand steps is seconds-to-minutes.
+```bash
+git clone https://github.com/bourkefloyd/deepmind-gradient-hackathon-2026.git
+cd deepmind-gradient-hackathon-2026
+git checkout cursor/jumpguy-realtime-agent-7cc0
+python3 -m pip install -r jumpguy/requirements.txt
+python3 -m jumpguy device cuda
+python3 -m jumpguy collect --episodes 80 --out jumpguy/data/heuristic.npz
+python3 -m jumpguy train --bc jumpguy/data/heuristic.npz --steps 2000 --out runs/bc1
+python3 -m jumpguy train --ppo --init runs/bc1/model.pt --steps 30000 --out runs/ppo1
+python3 -m jumpguy eval --policy cnn --ckpt runs/bc1/model.pt --episodes 15
+```
 
-`python -m jumpguy device` prints the resolved torch device.
+Expected artifacts: `runs/bc1/model.pt`, `runs/bc1/train.json`, `runs/ppo1/model.pt`, `runs/ppo1/train.json`.
+
+From a laptop that already has SSH:
+
+```bash
+export JUMPGUY_SSH_KEY=$HOME/.ssh/<private-key-matching-the-registered-name>
+export JUMPGUY_REMOTE=ubuntu@<instance-ip>
+export JUMPGUY_DEVICE=cuda
+# optional: WANDB_API_KEY  EPISODES=80  BC_STEPS=2000  PPO_STEPS=30000
+jumpguy/remote_train.sh up   "$JUMPGUY_REMOTE"
+jumpguy/remote_train.sh log  "$JUMPGUY_REMOTE"
+jumpguy/remote_train.sh pull "$JUMPGUY_REMOTE"   # → jumpguy/runs/remote/{bc1,ppo1}/
+```
+
+`RUNPOD_POD_ID` is document-only; same Python commands work on a RunPod box after you SSH in. `python -m jumpguy device` prints the resolved torch device.
 
 ## How to eval against the live game
 
 ```bash
-# heuristic CV controller (no checkpoint needed)
-python -m jumpguy.play --policy heuristic --episodes 2 --max-seconds 45 --hz 30
+# privileged-state teacher (Phaser hook + tryJump). No checkpoint needed.
+python -m jumpguy.play --policy heuristic --episodes 2 --max-seconds 90 --hz 60
 
-# trained CNN
-python -m jumpguy.play --policy cnn --ckpt jumpguy/runs/bc_smoke/model.pt --episodes 2
+# trained CNN (needs canvas grabs)
+python -m jumpguy.play --policy cnn --ckpt jumpguy/runs/bc_smoke/model.pt --episodes 1 --grab-every 1
 
 # watch it (needs a display)
 python -m jumpguy.play --policy heuristic --headed --episodes 1
@@ -130,7 +152,8 @@ Leaderboard (human) scores sit around 1400. Getting there is a training problem,
 - **Do not fake `/api/runs/*/pass`**. Seq tokens are server-checked; faking a score is both against the community rules and rejected.
 - **Leaderboard name** is the signed-in Viva+ username. There is no free-text “player name” box for guests. We still write `Grok Bot Son` into any input we find.
 - **CORS / iframe**: play the game origin as top-level. Embedding from localhost is blocked by CSP.
-- **Canvas / WebGL**: Phaser `AUTO` picks WebGL. `canvas.toDataURL()` is **black** (no `preserveDrawingBuffer`). The live env screenshots the composited canvas instead. Keyboard-only Space is flaky until focus; we tap the canvas (the game’s real pointer path) and also send Space.
+- **Canvas / WebGL**: Phaser `AUTO` picks WebGL. `canvas.toDataURL()` is **black** (no `preserveDrawingBuffer`). Screenshots use the composited layer when a frame is needed. The live heuristic prefers a **Phaser Game hook** (`Array.prototype.push` catch of `Phaser.GAMES.push(this)`) and calls `scene.tryJump()` — the same function Space uses — so the control loop is not screenshot-bound.
+- **Fallback**: if the hook misses, we tap the canvas + send Space and run the CV blob teacher.
 - **Audio**: jump/score/lose oggs; ignored by the agent.
 - **Offline mode**: if `POST /api/runs` fails the game still plays locally and skips submit.
 

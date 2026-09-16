@@ -68,6 +68,7 @@ class GameState:
     obstacles: list[Obstacle]
     t: float
     ticks: int
+    hooked: bool = False
 
 
 @dataclass

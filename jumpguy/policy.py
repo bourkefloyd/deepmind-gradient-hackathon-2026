@@ -24,21 +24,28 @@ class HeuristicPolicy:
     game) or from a cheap color blob detector on RGB frames.
     """
 
-    def __init__(self, lead_s: float = 0.22, min_lead_s: float = 0.08, latency_s: float = 0.08):
+    def __init__(self, lead_s: float = 0.20, min_lead_s: float = 0.08, latency_s: float = 0.0):
         self.lead_s = lead_s
         self.min_lead_s = min_lead_s
         self.latency_s = latency_s
         self._prev_blob_x: Optional[float] = None
         self._est_speed = 260.0
         self._started = False
+        self._did_jump = False
+        self._prev_ttc = 1e9
 
     def reset(self) -> None:
         self._prev_blob_x = None
         self._est_speed = 260.0
         self._started = False
+        self._did_jump = False
+        self._prev_ttc = 1e9
 
     def act(self, state: Optional[GameState] = None, frame: Optional[np.ndarray] = None) -> int:
-        if state is not None:
+        # Privileged Phaser / sim state beats pixels whenever it is real.
+        if state is not None and (state.hooked or state.speed > 0 or state.obstacles or state.status != "ready"):
+            return int(self._act_state(state))
+        if state is not None and state.status in ("ready", "gameover"):
             return int(self._act_state(state))
         if frame is not None:
             return int(self._act_pixels(frame))
@@ -46,6 +53,8 @@ class HeuristicPolicy:
 
     def _act_state(self, state: GameState) -> Action:
         if state.status in ("ready", "gameover"):
+            self._did_jump = False
+            self._prev_ttc = 1e9
             return Action.JUMP
         player_right = state.player_x + PLAYER_DISPLAY_W / 2.0
         incoming = [
@@ -54,6 +63,8 @@ class HeuristicPolicy:
             if not o.passed and (o.x + o.w / 2.0) > state.player_x - PLAYER_DISPLAY_W / 2.0
         ]
         if not incoming:
+            self._did_jump = False
+            self._prev_ttc = 1e9
             return Action.NOOP
         o = min(incoming, key=lambda z: z.x)
         overlap_x = o.x - o.w / 2.0
@@ -62,8 +73,14 @@ class HeuristicPolicy:
         ttc = dist / speed
         overlap_dur = (PLAYER_DISPLAY_W + o.w) / speed
         max_lead = max(self.min_lead_s, AIR_TIME_S - overlap_dur - 0.04)
-        lead = min(self.lead_s, max_lead)
-        if -0.04 < ttc <= lead:
+        lead = min(self.lead_s, max_lead) + self.latency_s
+        # Rising-edge: jump once as TTC enters the window (avoids buffer-spam).
+        if ttc > lead + 0.05:
+            self._did_jump = False
+        should = (not self._did_jump) and (-0.05 < ttc <= lead)
+        self._prev_ttc = ttc
+        if should:
+            self._did_jump = True
             return Action.JUMP
         return Action.NOOP
 

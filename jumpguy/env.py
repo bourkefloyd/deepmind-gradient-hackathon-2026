@@ -18,7 +18,99 @@ import numpy as np
 from .actions import Action
 from .constants import CANVAS_H, CANVAS_W, GAME_URL, PLAYER_NAME
 from .observe import FrameStack, hint_text_ratio
-from .sim import GameState, StepResult
+from .sim import GameState, Obstacle, StepResult
+
+# Phaser.GAMES.push(this) in the Game constructor. Catch the instance before
+# the ESM bundle hides it. Scene fields (player, obstacleManager, score, state,
+# tryJump, restartRun) are public class fields and survive minification.
+_HOOK_INIT_JS = """
+(() => {
+  if (window.__JUMPGUY_HOOKED) return;
+  window.__JUMPGUY_HOOKED = true;
+  const push = Array.prototype.push;
+  Array.prototype.push = function (...items) {
+    for (const item of items) {
+      try {
+        if (
+          item &&
+          typeof item === 'object' &&
+          item.scene &&
+          item.loop &&
+          item.config &&
+          (item.config.parent === 'game-root' || item.config.width === 960)
+        ) {
+          window.__JUMPGUY_GAME = item;
+        }
+      } catch (e) {}
+    }
+    return push.apply(this, items);
+  };
+})();
+"""
+
+_READ_STATE_JS = """
+() => {
+  const g = window.__JUMPGUY_GAME;
+  if (!g) return { hooked: false };
+  let scene = null;
+  try { scene = g.scene && g.scene.getScene ? g.scene.getScene('game') : null; } catch (e) {}
+  if (!scene) return { hooked: true, ready: false };
+  const om = scene.obstacleManager;
+  const p = scene.player;
+  let obstacles = [];
+  try {
+    const list = (om && om.getObstacles) ? om.getObstacles() : ((om && om.obstacles) || []);
+    obstacles = list.map((o) => ({
+      x: o.sprite ? o.sprite.x : 0,
+      w: o.sprite ? o.sprite.displayWidth : 30,
+      h: o.sprite ? o.sprite.displayHeight : 30,
+      passed: !!o.passed,
+    }));
+  } catch (e) {}
+  const body = p && p.body;
+  let speed = 0;
+  try { speed = om && om.getCurrentSpeed ? om.getCurrentSpeed() : (om ? om.speedPxPerSecond : 0); } catch (e) {}
+  return {
+    hooked: true,
+    ready: true,
+    score: Number(scene.score) || 0,
+    status: scene.state || 'ready',
+    player_x: p ? p.x : 211.2,
+    player_y: p ? p.y : 0,
+    player_vy: body ? body.velocity.y : 0,
+    grounded: body ? !!(body.blocked.down || body.touching.down) : true,
+    speed: Number(speed) || 0,
+    obstacles,
+    awaiting: !!scene.awaitingScoreSubmit,
+  };
+}
+"""
+
+_TRY_JUMP_JS = """
+() => {
+  const g = window.__JUMPGUY_GAME;
+  if (!g) return null;
+  const scene = g.scene && g.scene.getScene ? g.scene.getScene('game') : null;
+  if (scene && typeof scene.tryJump === 'function') {
+    scene.tryJump();
+    return 'tryJump';
+  }
+  return null;
+}
+"""
+
+_RESTART_JS = """
+() => {
+  const g = window.__JUMPGUY_GAME;
+  if (!g) return false;
+  const scene = g.scene && g.scene.getScene ? g.scene.getScene('game') : null;
+  if (scene && typeof scene.restartRun === 'function' && !scene.awaitingScoreSubmit) {
+    scene.restartRun();
+    return true;
+  }
+  return false;
+}
+"""
 
 
 @dataclass
@@ -46,6 +138,7 @@ class JumpGuyLive:
         player_name: str = PLAYER_NAME,
         navigation_timeout_ms: int = 30_000,
         chrome_channel: str = "chrome",
+        grab_every: int = 1,
     ):
         self.url = url
         self.headless = headless
@@ -54,6 +147,7 @@ class JumpGuyLive:
         self.player_name = player_name
         self.navigation_timeout_ms = navigation_timeout_ms
         self.chrome_channel = chrome_channel
+        self.grab_every = grab_every
         self._pw = None
         self._browser = None
         self._context = None
@@ -64,6 +158,11 @@ class JumpGuyLive:
         self._started_running = False
         self._last_hint = 0.0
         self._on_log: list[str] = []
+        self.hooked = False
+        self._focused = False
+        self._step_i = 0
+        self._last_frame: Optional[np.ndarray] = None
+        self._phaser: dict[str, Any] = {}
 
     def __enter__(self) -> "JumpGuyLive":
         self.start()
@@ -99,13 +198,17 @@ class JumpGuyLive:
         )
         self._page = self._context.new_page()
         self._page.set_default_timeout(self.navigation_timeout_ms)
+        self._page.add_init_script(_HOOK_INIT_JS)
         self._page.on("response", self._on_response)
         self._page.goto(self.url, wait_until="domcontentloaded")
         self._page.wait_for_selector("#game-root canvas", timeout=self.navigation_timeout_ms)
         self._canvas = self._page.locator("#game-root canvas")
         self._wait_until_ready()
+        self._wait_for_hook()
         self.info = LiveInfo()
         self._started_running = False
+        self._focused = False
+        self._step_i = 0
 
     def close(self) -> None:
         for obj in (self._context, self._browser):
@@ -175,21 +278,61 @@ class JumpGuyLive:
             time.sleep(0.12)
         # Still proceed: some themes / font rasterization may miss the threshold.
 
+    def _wait_for_hook(self, timeout_s: float = 4.0) -> None:
+        assert self._page is not None
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            try:
+                self.hooked = bool(self._page.evaluate("() => !!window.__JUMPGUY_GAME"))
+            except Exception:
+                self.hooked = False
+            if self.hooked:
+                snap = self._read_phaser()
+                if snap and snap.get("ready"):
+                    return
+            time.sleep(0.08)
+
+    def _read_phaser(self) -> dict[str, Any]:
+        assert self._page is not None
+        try:
+            data = self._page.evaluate(_READ_STATE_JS)
+        except Exception:
+            return {}
+        if isinstance(data, dict):
+            self._phaser = data
+            if data.get("hooked"):
+                self.hooked = True
+            return data
+        return {}
+
     def _press_jump(self) -> None:
-        """Tap the canvas (pointerdown) and poke Space. Keyboard-only is flaky
-        until Phaser has focus; the live game treats tap/click as jump."""
+        """Prefer scene.tryJump() (same as Space). Fall back to CDP Space / tap."""
         assert self._page is not None and self._canvas is not None
-        box = self._canvas.bounding_box()
-        if box:
-            # Click the playfield, not the HUD / overlay.
-            self._page.mouse.click(box["x"] + box["width"] * 0.50, box["y"] + box["height"] * 0.62)
-        else:
-            self._canvas.click()
+        if self.hooked:
+            try:
+                how = self._page.evaluate(_TRY_JUMP_JS)
+                if how == "tryJump":
+                    return
+            except Exception:
+                pass
+        if not self._focused:
+            box = self._canvas.bounding_box()
+            if box:
+                self._page.mouse.click(box["x"] + box["width"] * 0.50, box["y"] + box["height"] * 0.62)
+            else:
+                self._canvas.click()
+            self._focused = True
         self._page.keyboard.down("Space")
         self._page.keyboard.up("Space")
 
     def _press_restart(self) -> None:
         assert self._page is not None
+        if self.hooked:
+            try:
+                if self._page.evaluate(_RESTART_JS):
+                    return
+            except Exception:
+                pass
         self._page.keyboard.press("r")
 
     def _grab_frame(self) -> np.ndarray:
@@ -304,11 +447,51 @@ class JumpGuyLive:
         self.info.status = "ready"
         self.info.score = 0
         self._started_running = False
-        frame = self._grab_frame()
+        self._step_i = 0
+        frame = self._maybe_grab(force=True)
         stack = self.stacker.reset(frame)
-        return StepResult(frame, stack, self._state(), 0.0, False, {"event": "reset"})
+        self._read_phaser()
+        return StepResult(frame, stack, self._state(), 0.0, False, {"event": "reset", "hooked": self.hooked})
+
+    def _maybe_grab(self, force: bool = False) -> np.ndarray:
+        if force or self.grab_every > 0 and self._step_i % max(self.grab_every, 1) == 0:
+            try:
+                self._last_frame = self._grab_frame()
+            except Exception:
+                if self._last_frame is None:
+                    self._last_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        elif self._last_frame is None:
+            self._last_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        return self._last_frame
 
     def _state(self) -> GameState:
+        p = self._phaser or {}
+        if p.get("hooked") and p.get("ready"):
+            obs = [
+                Obstacle(x=float(o.get("x", 0)), w=float(o.get("w", 30)), h=float(o.get("h", 30)), passed=bool(o.get("passed")))
+                for o in (p.get("obstacles") or [])
+            ]
+            status = str(p.get("status") or self.info.status)
+            score = int(p.get("score") or self.info.score or 0)
+            if status == "running":
+                self.info.status = "running"
+            if status == "gameover":
+                self.info.status = "gameover"
+            if score > self.info.score:
+                self.info.score = score
+            return GameState(
+                score=self.info.score,
+                player_x=float(p.get("player_x") or CANVAS_W * 0.22),
+                player_y=float(p.get("player_y") or 0.0),
+                player_vy=float(p.get("player_vy") or 0.0),
+                grounded=bool(p.get("grounded", True)),
+                speed=float(p.get("speed") or 0.0),
+                status=self.info.status,
+                obstacles=obs,
+                t=0.0,
+                ticks=self._step_i,
+                hooked=True,
+            )
         return GameState(
             score=self.info.score,
             player_x=CANVAS_W * 0.22,
@@ -319,14 +502,17 @@ class JumpGuyLive:
             status=self.info.status,
             obstacles=[],
             t=0.0,
-            ticks=0,
+            ticks=self._step_i,
+            hooked=False,
         )
 
     def step(self, action: int | Action) -> StepResult:
         t0 = time.perf_counter()
+        self._step_i += 1
         if self.info.status == "gameover":
             if int(action) == Action.JUMP:
                 self.handle_game_over_ui(submit=False)
+                self._press_restart()
                 self._press_jump()
                 self.info.status = "ready"
                 self.info.score = 0
@@ -335,12 +521,15 @@ class JumpGuyLive:
             ta = time.perf_counter()
             self._press_jump()
             self.info.action_ms = (time.perf_counter() - ta) * 1000.0
-        frame = self._grab_frame()
-        self._poll_dom()
-        self._infer_status(frame)
+        self._read_phaser()
+        frame = self._maybe_grab(force=not self.hooked)
+        if not self.hooked:
+            self._poll_dom()
+            self._infer_status(frame)
+        else:
+            self._poll_dom()
         stack = self.stacker.push(frame)
         done = self.info.status == "gameover"
-        reward = 0.0
         self.info.latency_ms = (time.perf_counter() - t0) * 1000.0
         info = {
             "event": "dead" if done else "tick",
@@ -353,8 +542,11 @@ class JumpGuyLive:
             "run_id": self.info.run_id,
             "hint": self._last_hint,
             "overlay": self.info.overlay_open,
+            "hooked": self.hooked,
+            "n_obstacles": len((self._phaser or {}).get("obstacles") or []),
+            "speed": (self._phaser or {}).get("speed"),
         }
-        return StepResult(frame, stack, self._state(), reward, done, info)
+        return StepResult(frame, stack, self._state(), 0.0, done, info)
 
 
 def _has_player_pixels(frame: np.ndarray) -> bool:

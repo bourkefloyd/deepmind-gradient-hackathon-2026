@@ -50,6 +50,23 @@ class HeuristicTests(unittest.TestCase):
         self.assertEqual(policy.act(state=ready), Action.JUMP)
         self.assertEqual(policy.act(state=dead), Action.JUMP)
 
+    def test_jumps_once_per_approach(self):
+        policy = HeuristicPolicy(lead_s=0.2)
+        close = GameState(
+            score=0,
+            player_x=211.2,
+            player_y=388.0,
+            player_vy=0.0,
+            grounded=True,
+            speed=260.0,
+            status="running",
+            obstacles=[Obstacle(x=211.2 + 36 + 30, w=30, h=30)],
+            t=1.0,
+            ticks=60,
+        )
+        self.assertEqual(policy.act(state=close), Action.JUMP)
+        self.assertEqual(policy.act(state=close), Action.NOOP)
+
 
 class BlobTests(unittest.TestCase):
     def test_detects_colored_square(self):
