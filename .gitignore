@@ -9,3 +9,6 @@ __pycache__/
 jumpguy/runs/
 jumpguy/data/*.npz
 jumpguy/data/*.json
+jumpguy/runpod/out/pod-id
+jumpguy/runpod/out/volume-id
+jumpguy/runpod/out/ssh.env

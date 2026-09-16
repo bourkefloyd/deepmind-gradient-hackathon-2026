@@ -209,7 +209,7 @@ class CnnPolicy:
         path: str,
         device: str = "auto",
         temperature: float = 0.0,
-        jump_p_min: float = 0.55,
+        jump_p_min: float = 0.95,
         cooldown_ticks: int = 28,
     ):
         import torch

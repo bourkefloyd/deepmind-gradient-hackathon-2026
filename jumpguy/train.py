@@ -74,7 +74,7 @@ def _sim_score(model, device, episodes: int = 3, max_ticks: int = 900, seed: int
                 with torch.no_grad():
                     logits, _ = model(x)
                     p = float(torch.softmax(logits, dim=-1)[0, 1])
-                if p >= 0.55:
+                if p >= 0.95:
                     a = int(Action.JUMP)
                     cool = 28
                 else:

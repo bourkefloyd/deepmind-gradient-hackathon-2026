@@ -1,0 +1,5 @@
+pod-id
+volume-id
+ssh.env
+*
+!.gitignore
